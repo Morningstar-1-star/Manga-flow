@@ -1,5 +1,10 @@
 package com.example.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -292,7 +297,11 @@ fun AppNavHost(
     NavHost(
         navController = navController,
         startDestination = Screen.Explore.route,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = { fadeIn(animationSpec = tween(280)) + slideInHorizontally(initialOffsetX = { it / 6 }, animationSpec = tween(280)) },
+        exitTransition = { fadeOut(animationSpec = tween(280)) + slideOutHorizontally(targetOffsetX = { -it / 6 }, animationSpec = tween(280)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(280)) + slideInHorizontally(initialOffsetX = { -it / 6 }, animationSpec = tween(280)) },
+        popExitTransition = { fadeOut(animationSpec = tween(280)) + slideOutHorizontally(targetOffsetX = { it / 6 }, animationSpec = tween(280)) }
     ) {
         composable(Screen.Explore.route) {
             ExploreScreen(

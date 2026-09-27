@@ -1,5 +1,16 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,10 +43,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -65,10 +79,29 @@ fun MangaCard(
     isCompleted: Boolean = manga.readProgressPercent >= 100,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.93f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "card_press_scale"
+    )
+
     Column(
         modifier = modifier
             .width(135.dp)
-            .clickable(onClick = onClick)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
             .testTag("manga_card_${manga.id}"),
         horizontalAlignment = Alignment.Start
     ) {
@@ -427,6 +460,49 @@ private fun InfoRow(label: String, value: String) {
             color = KotatsuTextPrimary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun ShimmerMangaCardPlaceholder(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.65f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmer_alpha"
+    )
+
+    Column(
+        modifier = modifier.width(135.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(KotatsuDarkSurfaceVariant.copy(alpha = alpha))
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .height(14.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(KotatsuDarkSurfaceVariant.copy(alpha = alpha))
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .height(10.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(KotatsuDarkSurfaceVariant.copy(alpha = alpha))
         )
     }
 }
