@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -88,7 +91,7 @@ fun LiquidGlassNavigationBar(
 
         val refraction = if (refractionAmount > 0.dp) {
             GlassRefraction(
-                height = (refractionAmount * 0.85f).coerceAtLeast(4.dp),
+                height = (refractionAmount * 0.85f).coerceAtLeast(6.dp),
                 amount = refractionAmount
             )
         } else {
@@ -104,8 +107,8 @@ fun LiquidGlassNavigationBar(
 
         val highlight = if (settings.liquidGlassRimHighlight) {
             GlassHighlight(
-                width = 2.dp,
-                alpha = 0.65f,
+                width = 2.0.dp,
+                alpha = 0.85f,
                 lightAngleDegrees = 245f
             )
         } else {
@@ -113,19 +116,20 @@ fun LiquidGlassNavigationBar(
         }
 
         val saturation = when (settings.liquidGlassIntensity) {
-            "Subtle" -> 1.22f
-            "Balanced" -> 1.38f
-            "Strong" -> 1.6f
-            else -> 1.38f
+            "Subtle" -> 1.25f
+            "Balanced" -> 1.45f
+            "Strong" -> 1.70f
+            else -> 1.45f
         }
 
+        // Apple iOS Liquid Glass translucent crystalline tint
         val tintColor = when (settings.liquidGlassTintOption) {
             "Custom" -> Color(settings.liquidGlassCustomTintColor).copy(alpha = settings.liquidGlassTransparency.coerceIn(0.05f, 0.85f))
-            else -> Color(0xFF0F172A).copy(alpha = settings.liquidGlassTransparency.coerceIn(0.12f, 0.45f))
+            else -> Color(0x30FFFFFF).copy(alpha = settings.liquidGlassTransparency.coerceIn(0.08f, 0.45f))
         }
 
         GlassStyle(
-            shape = GlassShape.RoundedRectangle(26.dp),
+            shape = GlassShape.RoundedRectangle(30.dp),
             blurRadius = blurRadius,
             refraction = refraction,
             saturation = saturation,
@@ -134,7 +138,7 @@ fun LiquidGlassNavigationBar(
             noiseAlpha = 0.015f,
             chromaticAberration = chromaticAberration,
             isInteractive = settings.liquidGlassGelPress,
-            fallbackScrim = Color(0xDD0F172A)
+            fallbackScrim = Color(0x401E293B)
         )
     }
 
@@ -145,25 +149,36 @@ fun LiquidGlassNavigationBar(
         contentAlignment = Alignment.Center
     ) {
         if (isGlassEnabled) {
-            // Authentic GlassBottomBar from Abdullajon1881/LiquidGlass
-            GlassBottomBar(
-                state = glassState,
-                style = glassStyle,
+            // Authentic GlassBottomBar from Abdullajon1881/LiquidGlass with ambient elevation
+            Box(
                 modifier = Modifier
                     .widthIn(max = 520.dp)
                     .fillMaxWidth()
-                    .testTag("liquid_glass_bottom_bar"),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-            ) {
-                navItems.forEach { item ->
-                    val isSelected = currentRoute == item.route
-                    LiquidGlassNavItem(
-                        item = item,
-                        isSelected = isSelected,
-                        showLabel = settings.showNavLabels,
-                        onClick = { onNavigate(item.route) },
-                        modifier = Modifier.weight(1f)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(30.dp),
+                        spotColor = Color.Black.copy(alpha = 0.55f),
+                        ambientColor = Color.Black.copy(alpha = 0.35f)
                     )
+            ) {
+                GlassBottomBar(
+                    state = glassState,
+                    style = glassStyle,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("liquid_glass_bottom_bar"),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    navItems.forEach { item ->
+                        val isSelected = currentRoute == item.route
+                        LiquidGlassNavItem(
+                            item = item,
+                            isSelected = isSelected,
+                            showLabel = settings.showNavLabels,
+                            onClick = { onNavigate(item.route) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         } else {
@@ -173,7 +188,11 @@ fun LiquidGlassNavigationBar(
                     .widthIn(max = 520.dp)
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 64.dp)
-                    .clip(RoundedCornerShape(26.dp))
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = RoundedCornerShape(30.dp)
+                    )
+                    .clip(RoundedCornerShape(30.dp))
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
                     .testTag("liquid_glass_bottom_bar"),
@@ -206,55 +225,72 @@ private fun RowScope.LiquidGlassNavItem(
     val interactionSource = remember { MutableInteractionSource() }
 
     val iconScale by animateFloatAsState(
-        targetValue = if (isSelected) 1.12f else 1.0f,
+        targetValue = if (isSelected) 1.14f else 1.0f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f),
         label = "iconScale"
     )
 
     val activePillAlpha by animateFloatAsState(
-        targetValue = if (isSelected) 0.22f else 0.0f,
+        targetValue = if (isSelected) 0.32f else 0.0f,
         animationSpec = spring(dampingRatio = 0.7f),
         label = "pillAlpha"
     )
 
     val activeColor = item.activeColor
     val iconTint by animateColorAsState(
-        targetValue = if (isSelected) activeColor else KotatsuTextSecondary,
+        targetValue = if (isSelected) activeColor else Color.White.copy(alpha = 0.75f),
         label = "iconTint"
     )
 
     val labelColor by animateColorAsState(
-        targetValue = if (isSelected) activeColor else KotatsuTextSecondary,
+        targetValue = if (isSelected) activeColor else Color.White.copy(alpha = 0.75f),
         label = "labelColor"
     )
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(22.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(bounded = true, color = activeColor),
                 role = Role.Tab,
                 onClick = onClick
             )
-            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .padding(horizontal = 4.dp, vertical = 5.dp)
             .testTag("liquid_nav_${item.title.lowercase()}"),
         contentAlignment = Alignment.Center
     ) {
-        // Active indicator pill
+        // Apple-style luminous active indicator pill
         if (activePillAlpha > 0.01f) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(activeColor.copy(alpha = activePillAlpha))
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                activeColor.copy(alpha = (activePillAlpha * 1.3f).coerceAtMost(0.48f)),
+                                activeColor.copy(alpha = activePillAlpha * 0.75f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.45f),
+                                activeColor.copy(alpha = 0.30f)
+                            )
+                        ),
+                        shape = RoundedCornerShape(22.dp)
+                    )
             )
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(vertical = 2.dp)
+            modifier = Modifier.padding(vertical = 3.dp)
         ) {
             Box(
                 modifier = Modifier

@@ -1,81 +1,106 @@
 package dev.liquidglass.compose
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.platform.InspectorInfo
-import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.platform.LocalGraphicsContext
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.ceil
 
 /**
- * State and provider architecture for Abdullajon1881/LiquidGlass.
- * Screen content is wrapped inside liquidGlassProvider(state),
- * while the Glass element is placed as a sibling ABOVE it.
+ * Marks this element's content as the backdrop seen through Liquid Glass.
+ *
+ * The content is recorded into a reusable [GraphicsLayer] and drawn normally, so
+ * the visual output of this element does not change. Glass elements created with
+ * [liquidGlass] or [LiquidGlassContainer] that share [state] sample the recording
+ * to build their refraction.
+ *
+ * One state belongs to exactly one provider at a time.
  */
-@Stable
-class LiquidGlassProviderState {
-    var providerBoundsInRoot: Rect by mutableStateOf(Rect.Zero)
-        internal set
+public fun Modifier.liquidGlassProvider(state: LiquidGlassProviderState): Modifier =
+    this then LiquidGlassProviderElement(state)
 
-    var isReady: Boolean by mutableStateOf(false)
-        internal set
-
-    internal fun updateCoordinates(coordinates: LayoutCoordinates) {
-        if (coordinates.isAttached) {
-            val pos = coordinates.positionInRoot()
-            val size = coordinates.size.toSize()
-            providerBoundsInRoot = Rect(pos, size)
-            isReady = true
-        }
-    }
-}
-
-@Composable
-fun rememberLiquidGlassProviderState(): LiquidGlassProviderState {
-    return remember { LiquidGlassProviderState() }
-}
-
-/**
- * Modifier that designates the backdrop source content to be sampled by liquid glass elements.
- */
-fun Modifier.liquidGlassProvider(state: LiquidGlassProviderState): Modifier {
-    return this.then(LiquidGlassProviderElement(state))
-}
-
-private data class LiquidGlassProviderElement(
-    val state: LiquidGlassProviderState
+private class LiquidGlassProviderElement(
+    private val state: LiquidGlassProviderState,
 ) : ModifierNodeElement<LiquidGlassProviderNode>() {
+
     override fun create(): LiquidGlassProviderNode = LiquidGlassProviderNode(state)
 
     override fun update(node: LiquidGlassProviderNode) {
-        node.state = state
+        node.updateState(state)
     }
 
     override fun InspectorInfo.inspectableProperties() {
         name = "liquidGlassProvider"
+        properties["state"] = state
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is LiquidGlassProviderElement && other.state === state
+
+    override fun hashCode(): Int = System.identityHashCode(state)
 }
 
 private class LiquidGlassProviderNode(
-    var state: LiquidGlassProviderState
-) : Modifier.Node(), GlobalPositionAwareModifierNode, DrawModifierNode {
+    private var state: LiquidGlassProviderState,
+) : Modifier.Node(),
+    DrawModifierNode,
+    GlobalPositionAwareModifierNode,
+    CompositionLocalConsumerModifierNode {
+
+    private var layer: GraphicsLayer? = null
+
+    fun updateState(newState: LiquidGlassProviderState) {
+        if (newState === state) return
+        state.onProviderDetached()
+        state = newState
+        attachToState()
+    }
+
+    override fun onAttach() {
+        layer = currentValueOf(LocalGraphicsContext).createGraphicsLayer()
+        attachToState()
+    }
+
+    override fun onDetach() {
+        state.onProviderDetached()
+        layer?.let { currentValueOf(LocalGraphicsContext).releaseGraphicsLayer(it) }
+        layer = null
+    }
 
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
-        state.updateCoordinates(coordinates)
+        state.onProviderPositioned(coordinates)
     }
 
     override fun ContentDrawScope.draw() {
-        drawContent()
+        val contentLayer = layer
+        if (contentLayer == null || size.width < 1f || size.height < 1f) {
+            drawContent()
+            return
+        }
+        contentLayer.record(
+            density = this,
+            layoutDirection = layoutDirection,
+            size = IntSize(ceil(size.width).toInt(), ceil(size.height).toInt()),
+        ) {
+            this@draw.drawContent()
+        }
+        drawLayer(contentLayer)
+    }
+
+    private fun attachToState() {
+        check(state.contentLayer == null || state.contentLayer === layer) {
+            "LiquidGlassProviderState is already attached to another liquidGlassProvider. " +
+                "Each state may back exactly one provider."
+        }
+        state.contentLayer = layer
     }
 }
