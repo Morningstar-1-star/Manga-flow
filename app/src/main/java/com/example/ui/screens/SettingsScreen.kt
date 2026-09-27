@@ -388,6 +388,243 @@ private fun AppearanceSettingsContent(
                 )
             }
         }
+
+        item {
+            Text("Liquid Glass Navigation", color = primaryColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            SettingsCard {
+                SettingsSwitchRow(
+                    title = "Liquid Glass Navigation Bar",
+                    subtitle = "Enable Apple-style real-time AGSL refractive Liquid Glass bottom navigation bar",
+                    checked = settings.liquidGlassNavEnabled,
+                    onCheckedChange = { viewModel.updateSettings { s -> s.copy(liquidGlassNavEnabled = it) } }
+                )
+
+                if (settings.liquidGlassNavEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Glass Intensity Chips
+                    Text("Glass Intensity", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Subtle", "Balanced", "Strong").forEach { intensity ->
+                            val isSel = settings.liquidGlassIntensity == intensity
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        viewModel.updateSettings { s ->
+                                            val (blur, refr) = when (intensity) {
+                                                "Subtle" -> Pair(12f, 8f)
+                                                "Balanced" -> Pair(18f, 12f)
+                                                "Strong" -> Pair(24f, 18f)
+                                                else -> Pair(18f, 12f)
+                                            }
+                                            s.copy(
+                                                liquidGlassIntensity = intensity,
+                                                liquidGlassBlurDp = blur,
+                                                liquidGlassRefractionDp = refr
+                                            )
+                                        }
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) primaryColor.copy(alpha = 0.2f) else surfaceColor,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) primaryColor else outlineColor)
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = intensity,
+                                        color = if (isSel) primaryColor else KotatsuTextSecondary,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Blur Slider (0..30 dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Blur Radius", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${settings.liquidGlassBlurDp.toInt()} dp", color = primaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = settings.liquidGlassBlurDp,
+                        onValueChange = { viewModel.updateSettings { s -> s.copy(liquidGlassBlurDp = it) } },
+                        valueRange = 0f..30f,
+                        colors = SliderDefaults.colors(thumbColor = primaryColor, activeTrackColor = primaryColor)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Refraction Slider (0..24 dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Refraction Distortion", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${settings.liquidGlassRefractionDp.toInt()} dp", color = primaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = settings.liquidGlassRefractionDp,
+                        onValueChange = { viewModel.updateSettings { s -> s.copy(liquidGlassRefractionDp = it) } },
+                        valueRange = 0f..24f,
+                        colors = SliderDefaults.colors(thumbColor = primaryColor, activeTrackColor = primaryColor)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Transparency Slider (0..1.0)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Glass Transparency", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${(settings.liquidGlassTransparency * 100).toInt()}%", color = primaryColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = settings.liquidGlassTransparency,
+                        onValueChange = { viewModel.updateSettings { s -> s.copy(liquidGlassTransparency = it) } },
+                        valueRange = 0.05f..0.85f,
+                        colors = SliderDefaults.colors(thumbColor = primaryColor, activeTrackColor = primaryColor)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Chromatic Aberration
+                    Text("Chromatic Aberration (Dispersion)", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("OFF", "Low", "Medium").forEach { mode ->
+                            val isSel = settings.liquidGlassChromaticAberration == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        viewModel.updateSettings { s -> s.copy(liquidGlassChromaticAberration = mode) }
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) primaryColor.copy(alpha = 0.2f) else surfaceColor,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) primaryColor else outlineColor)
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = mode,
+                                        color = if (isSel) primaryColor else KotatsuTextSecondary,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Tint Option (System / Custom)
+                    Text("Glass Tint", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("System", "Custom").forEach { tintOpt ->
+                            val isSel = settings.liquidGlassTintOption == tintOpt
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        viewModel.updateSettings { s -> s.copy(liquidGlassTintOption = tintOpt) }
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) primaryColor.copy(alpha = 0.2f) else surfaceColor,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) primaryColor else outlineColor)
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = tintOpt,
+                                        color = if (isSel) primaryColor else KotatsuTextSecondary,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Performance Mode
+                    Text("Performance Mode", color = KotatsuTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("Auto", "Battery Saver", "Maximum quality").forEach { perf ->
+                            val isSel = settings.liquidGlassPerformanceMode == perf
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        viewModel.updateSettings { s -> s.copy(liquidGlassPerformanceMode = perf) }
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) primaryColor.copy(alpha = 0.2f) else surfaceColor,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) primaryColor else outlineColor)
+                            ) {
+                                Box(modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = perf,
+                                        color = if (isSel) primaryColor else KotatsuTextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    SettingsSwitchRow(
+                        title = "Rim Highlight",
+                        subtitle = "Render Apple-style specular light catch on top-left edge",
+                        checked = settings.liquidGlassRimHighlight,
+                        onCheckedChange = { viewModel.updateSettings { s -> s.copy(liquidGlassRimHighlight = it) } }
+                    )
+
+                    SettingsSwitchRow(
+                        title = "Gel Press Interaction",
+                        subtitle = "Dynamic responsive jelly bounce and deformation when tabs are pressed",
+                        checked = settings.liquidGlassGelPress,
+                        onCheckedChange = { viewModel.updateSettings { s -> s.copy(liquidGlassGelPress = it) } }
+                    )
+
+                    SettingsSwitchRow(
+                        title = "Reduced Transparency Mode",
+                        subtitle = "Disable glass blur for accessibility or lower latency",
+                        checked = settings.liquidGlassReducedTransparency,
+                        onCheckedChange = { viewModel.updateSettings { s -> s.copy(liquidGlassReducedTransparency = it) } }
+                    )
+                }
+            }
+        }
     }
 }
 

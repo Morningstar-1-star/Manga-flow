@@ -2,7 +2,7 @@ package com.example.data.model
 
 data class AppSettings(
     // Appearance
-    val colorScheme: String = "Totoro", // Totoro, Dynamic, Expressive, Miku, Asuka, Pitch Black
+    val colorScheme: String = "Totoro", // Totoro, Black & White, Manga Yellow, Pink, Silver, Expressive
     val themeMode: String = "Dark", // Dark, Light, Follow system
     val isAmoledBlack: Boolean = true,
     val appLanguage: String = "Follow system",
@@ -13,13 +13,27 @@ data class AppSettings(
     val badgesInLists: String = "Saved manga, Favourites",
     val showFloatingContinue: Boolean = true,
     val showNavLabels: Boolean = true,
-    val floatingNavBar: Boolean = false,
+    val floatingNavBar: Boolean = true,
     val pinNavUi: Boolean = false,
     val exitConfirmation: Boolean = false,
     val showRecentShortcuts: Boolean = true,
     val hideNsfwShortcuts: Boolean = true,
     val protectApp: Boolean = false,
     val appPinCode: String = "",
+
+    // Liquid Glass Navigation (Abdullajon1881/LiquidGlass)
+    val liquidGlassNavEnabled: Boolean = true,
+    val liquidGlassIntensity: String = "Balanced", // Subtle, Balanced, Strong
+    val liquidGlassBlurDp: Float = 18f, // 0..30 dp
+    val liquidGlassRefractionDp: Float = 12f, // 0..24 dp
+    val liquidGlassChromaticAberration: String = "Low", // OFF, Low, Medium
+    val liquidGlassRimHighlight: Boolean = true,
+    val liquidGlassGelPress: Boolean = true,
+    val liquidGlassTintOption: String = "System", // System, Custom
+    val liquidGlassCustomTintColor: Long = 0xFF14B8A6,
+    val liquidGlassTransparency: Float = 0.25f, // 0.0 to 1.0
+    val liquidGlassReducedTransparency: Boolean = false,
+    val liquidGlassPerformanceMode: String = "Auto", // Auto, Battery Saver, Maximum quality
 
     // Manga Sources
     val sourcesSortingOrder: String = "Name",

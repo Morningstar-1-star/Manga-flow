@@ -31,16 +31,14 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -55,6 +53,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.ui.components.LiquidGlassNavigationBar
 import com.example.ui.screens.BookmarksScreen
 import com.example.ui.screens.DownloadsScreen
 import com.example.ui.screens.ExploreScreen
@@ -76,6 +75,8 @@ import com.example.ui.theme.KotatsuTeal
 import com.example.ui.theme.KotatsuTextPrimary
 import com.example.ui.theme.KotatsuTextSecondary
 import com.example.ui.viewmodel.MangaViewModel
+import dev.liquidglass.compose.liquidGlassProvider
+import dev.liquidglass.compose.rememberLiquidGlassProviderState
 
 data class BottomNavItem(
     val title: String,
@@ -94,6 +95,9 @@ fun AppNavigation(
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val settings by viewModel.appSettings.collectAsState()
+
+    val glassState = rememberLiquidGlassProviderState()
 
     // Bottom Navigation items matching Screenshots 1 & 3:
     // History, Favourites, Explore, Feed (badge 6), Suggestions
@@ -142,7 +146,7 @@ fun AppNavigation(
         val isWideScreen = maxWidth > 680.dp
 
         if (isWideScreen && isMainTab) {
-            // Tablet / Landscape with Navigation Rail (Screenshot 1 & 2!)
+            // Tablet / Landscape with Navigation Rail
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -152,7 +156,7 @@ fun AppNavigation(
                                 .padding(vertical = 12.dp)
                                 .size(44.dp)
                                 .background(KotatsuTeal.copy(alpha = 0.2f), androidx.compose.foundation.shape.CircleShape),
-                            contentAlignment = androidx.compose.ui.Alignment.Center
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MenuBook,
@@ -213,76 +217,45 @@ fun AppNavigation(
                 }
             }
         } else {
-            // Mobile Portrait Layout with Bottom Navigation Bar (Screenshot 3!)
-            Scaffold(
-                bottomBar = {
-                    if (isMainTab) {
-                        NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier
-                                .navigationBarsPadding()
-                                .testTag("bottom_nav_bar")
-                        ) {
-                            navItems.forEach { item ->
-                                val selected = currentRoute == item.route
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = {
-                                        if (item.badgeCount != null) {
-                                            BadgedBox(badge = {
-                                                Badge(containerColor = KotatsuRose) {
-                                                    Text(text = item.badgeCount.toString(), color = Color.White)
-                                                }
-                                            }) {
-                                                Icon(
-                                                    imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                                                    contentDescription = item.title
-                                                )
-                                            }
-                                        } else {
-                                            Icon(
-                                                imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                                                contentDescription = item.title
-                                            )
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            text = item.title,
-                                            fontSize = 11.sp,
-                                            maxLines = 1
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color.White,
-                                        selectedTextColor = Color.White,
-                                        indicatorColor = item.activeColor,
-                                        unselectedIconColor = KotatsuTextSecondary,
-                                        unselectedTextColor = KotatsuTextSecondary
-                                    ),
-                                    modifier = Modifier.testTag("bottom_nav_${item.title.lowercase()}")
-                                )
-                            }
-                        }
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.background
-            ) { innerPadding ->
+            // Mobile Portrait Layout with Liquid Glass Bottom Navigation Bar
+            // Architecture: Content wrapped with liquidGlassProvider, with LiquidGlassNavigationBar as sibling ABOVE it!
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                // 1. Screen content wrapped inside liquidGlassProvider
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
+                        .liquidGlassProvider(glassState)
                 ) {
-                    AppNavHost(navController = navController, viewModel = viewModel)
+                    AppNavHost(
+                        navController = navController,
+                        viewModel = viewModel
+                    )
+                }
+
+                // 2. Liquid Glass Bottom Navigation Bar - sibling ABOVE provider!
+                if (isMainTab) {
+                    LiquidGlassNavigationBar(
+                        glassState = glassState,
+                        settings = settings,
+                        navItems = navItems,
+                        currentRoute = currentRoute,
+                        onNavigate = { route ->
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                    )
                 }
             }
         }
@@ -298,13 +271,13 @@ fun AppNavHost(
     NavHost(
         navController = navController,
         startDestination = Screen.Explore.route,
-        modifier = modifier,
-        enterTransition = { fadeIn(animationSpec = tween(280)) + slideInHorizontally(initialOffsetX = { it / 6 }, animationSpec = tween(280)) },
-        exitTransition = { fadeOut(animationSpec = tween(280)) + slideOutHorizontally(targetOffsetX = { -it / 6 }, animationSpec = tween(280)) },
-        popEnterTransition = { fadeIn(animationSpec = tween(280)) + slideInHorizontally(initialOffsetX = { -it / 6 }, animationSpec = tween(280)) },
-        popExitTransition = { fadeOut(animationSpec = tween(280)) + slideOutHorizontally(targetOffsetX = { it / 6 }, animationSpec = tween(280)) }
+        modifier = modifier
     ) {
-        composable(Screen.Explore.route) {
+        composable(
+            route = Screen.Explore.route,
+            enterTransition = { fadeIn(animationSpec = tween(300)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) }
+        ) {
             ExploreScreen(
                 viewModel = viewModel,
                 onNavigateToLocalStorage = { navController.navigate(Screen.LocalStorage.route) },
@@ -319,18 +292,11 @@ fun AppNavHost(
             )
         }
 
-        composable(Screen.History.route) {
-            HistoryScreen(
-                viewModel = viewModel,
-                onNavigateToMangaDetails = { mangaId, sourceId ->
-                    navController.navigate(Screen.MangaDetails.createRoute(mangaId, sourceId))
-                },
-                onNavigateToSearch = { navController.navigate(Screen.Search.route) },
-                onOpenSettings = { navController.navigate(Screen.Settings.route) }
-            )
-        }
-
-        composable(Screen.Favourites.route) {
+        composable(
+            route = Screen.Favourites.route,
+            enterTransition = { fadeIn(animationSpec = tween(300)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) }
+        ) {
             FavouritesScreen(
                 viewModel = viewModel,
                 onNavigateToMangaDetails = { mangaId, sourceId ->
@@ -341,7 +307,26 @@ fun AppNavHost(
             )
         }
 
-        composable(Screen.Feed.route) {
+        composable(
+            route = Screen.History.route,
+            enterTransition = { fadeIn(animationSpec = tween(300)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) }
+        ) {
+            HistoryScreen(
+                viewModel = viewModel,
+                onNavigateToMangaDetails = { mangaId, sourceId ->
+                    navController.navigate(Screen.MangaDetails.createRoute(mangaId, sourceId))
+                },
+                onNavigateToSearch = { navController.navigate(Screen.Search.route) },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) }
+            )
+        }
+
+        composable(
+            route = Screen.Feed.route,
+            enterTransition = { fadeIn(animationSpec = tween(300)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) }
+        ) {
             FeedScreen(
                 viewModel = viewModel,
                 onNavigateToMangaDetails = { mangaId, sourceId ->
@@ -350,7 +335,11 @@ fun AppNavHost(
             )
         }
 
-        composable(Screen.Suggestions.route) {
+        composable(
+            route = Screen.Suggestions.route,
+            enterTransition = { fadeIn(animationSpec = tween(300)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) }
+        ) {
             SuggestionsScreen(
                 viewModel = viewModel,
                 onNavigateToMangaDetails = { mangaId, sourceId ->
@@ -360,11 +349,69 @@ fun AppNavHost(
         }
 
         composable(
+            route = Screen.Search.route,
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+            exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+        ) {
+            SearchScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onNavigateToMangaDetails = { mangaId, sourceId ->
+                    navController.navigate(Screen.MangaDetails.createRoute(mangaId, sourceId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.Bookmarks.route,
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+            exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+        ) {
+            BookmarksScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onReadChapter = { mangaId, chapterId, sourceId ->
+                    navController.navigate(Screen.Reader.createRoute(mangaId, chapterId, sourceId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.Downloads.route,
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+            exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+        ) {
+            DownloadsScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onNavigateToMangaDetails = { mangaId, sourceId ->
+                    navController.navigate(Screen.MangaDetails.createRoute(mangaId, sourceId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.LocalStorage.route,
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+            exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+        ) {
+            LocalStorageScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onReadCbz = { mangaId, chapterId, sourceId ->
+                    navController.navigate(Screen.Reader.createRoute(mangaId, chapterId, sourceId))
+                }
+            )
+        }
+
+        composable(
             route = Screen.MangaDetails.route,
             arguments = listOf(
                 navArgument("mangaId") { type = NavType.StringType },
                 navArgument("sourceId") { type = NavType.StringType }
-            )
+            ),
+            enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+            exitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
         ) { backStackEntry ->
             val mangaId = backStackEntry.arguments?.getString("mangaId") ?: ""
             val sourceId = backStackEntry.arguments?.getString("sourceId") ?: "mangadex"
@@ -374,8 +421,8 @@ fun AppNavHost(
                 sourceId = sourceId,
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onReadChapter = { mId, chId, srcId ->
-                    navController.navigate(Screen.Reader.createRoute(mId, chId, srcId))
+                onReadChapter = { selectedMangaId, chapterId, selectedSourceId ->
+                    navController.navigate(Screen.Reader.createRoute(selectedMangaId, chapterId, selectedSourceId))
                 }
             )
         }
@@ -386,7 +433,9 @@ fun AppNavHost(
                 navArgument("mangaId") { type = NavType.StringType },
                 navArgument("chapterId") { type = NavType.StringType },
                 navArgument("sourceId") { type = NavType.StringType }
-            )
+            ),
+            enterTransition = { fadeIn(animationSpec = tween(200)) },
+            exitTransition = { fadeOut(animationSpec = tween(200)) }
         ) { backStackEntry ->
             val mangaId = backStackEntry.arguments?.getString("mangaId") ?: ""
             val chapterId = backStackEntry.arguments?.getString("chapterId") ?: ""
@@ -402,33 +451,10 @@ fun AppNavHost(
             )
         }
 
-        composable(Screen.Downloads.route) {
-            DownloadsScreen(
+        composable(Screen.Settings.route) {
+            SettingsScreen(
                 viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onNavigateToMangaDetails = { mangaId, sourceId ->
-                    navController.navigate(Screen.MangaDetails.createRoute(mangaId, sourceId))
-                }
-            )
-        }
-
-        composable(Screen.Bookmarks.route) {
-            BookmarksScreen(
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onReadChapter = { mId, chId, srcId ->
-                    navController.navigate(Screen.Reader.createRoute(mId, chId, srcId))
-                }
-            )
-        }
-
-        composable(Screen.LocalStorage.route) {
-            LocalStorageScreen(
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onReadCbz = { mId, chId, srcId ->
-                    navController.navigate(Screen.Reader.createRoute(mId, chId, srcId))
-                }
+                onBackClick = { navController.popBackStack() }
             )
         }
 
@@ -440,23 +466,6 @@ fun AppNavHost(
                     viewModel.selectSourceFeed(sourceId)
                     navController.navigate(Screen.Search.route)
                 }
-            )
-        }
-
-        composable(Screen.Search.route) {
-            SearchScreen(
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onNavigateToMangaDetails = { mangaId, sourceId ->
-                    navController.navigate(Screen.MangaDetails.createRoute(mangaId, sourceId))
-                }
-            )
-        }
-
-        composable(Screen.Settings.route) {
-            SettingsScreen(
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() }
             )
         }
     }

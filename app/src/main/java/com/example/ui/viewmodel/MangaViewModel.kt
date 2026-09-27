@@ -33,8 +33,10 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     private val sourceManager = SourceManager(database.sourceConfigDao())
     val repository = MangaRepository(application, database, sourceManager)
 
+    private val prefs = application.getSharedPreferences("kotatsu_app_settings", android.content.Context.MODE_PRIVATE)
+
     // Settings State
-    private val _appSettings = MutableStateFlow(AppSettings())
+    private val _appSettings = MutableStateFlow(loadPersistedSettings())
     val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
 
     // Advanced Search Filter State
@@ -476,7 +478,69 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
 
     // Settings actions
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
-        _appSettings.value = transform(_appSettings.value)
+        val updated = transform(_appSettings.value)
+        _appSettings.value = updated
+        persistSettings(updated)
+    }
+
+    private fun loadPersistedSettings(): AppSettings {
+        return AppSettings(
+            colorScheme = prefs.getString("colorScheme", "Totoro") ?: "Totoro",
+            themeMode = prefs.getString("themeMode", "Dark") ?: "Dark",
+            isAmoledBlack = prefs.getBoolean("isAmoledBlack", true),
+            showQuickFilters = prefs.getBoolean("showQuickFilters", true),
+            showReadingProgress = prefs.getBoolean("showReadingProgress", true),
+            showFloatingContinue = prefs.getBoolean("showFloatingContinue", true),
+            showNavLabels = prefs.getBoolean("showNavLabels", true),
+            liquidGlassNavEnabled = prefs.getBoolean("liquidGlassNavEnabled", true),
+            liquidGlassIntensity = prefs.getString("liquidGlassIntensity", "Balanced") ?: "Balanced",
+            liquidGlassBlurDp = prefs.getFloat("liquidGlassBlurDp", 18f),
+            liquidGlassRefractionDp = prefs.getFloat("liquidGlassRefractionDp", 12f),
+            liquidGlassChromaticAberration = prefs.getString("liquidGlassChromaticAberration", "Low") ?: "Low",
+            liquidGlassRimHighlight = prefs.getBoolean("liquidGlassRimHighlight", true),
+            liquidGlassGelPress = prefs.getBoolean("liquidGlassGelPress", true),
+            liquidGlassTintOption = prefs.getString("liquidGlassTintOption", "System") ?: "System",
+            liquidGlassCustomTintColor = prefs.getLong("liquidGlassCustomTintColor", 0xFF14B8A6),
+            liquidGlassTransparency = prefs.getFloat("liquidGlassTransparency", 0.25f),
+            liquidGlassReducedTransparency = prefs.getBoolean("liquidGlassReducedTransparency", false),
+            liquidGlassPerformanceMode = prefs.getString("liquidGlassPerformanceMode", "Auto") ?: "Auto",
+            disableNsfw = prefs.getBoolean("disableNsfw", false),
+            chooseMirrorAuto = prefs.getBoolean("chooseMirrorAuto", true),
+            keepScreenOn = prefs.getBoolean("keepScreenOn", true),
+            fullscreenMode = prefs.getBoolean("fullscreenMode", true),
+            preloadPagesWifiOnly = prefs.getBoolean("preloadPagesWifiOnly", true),
+            downloadOnlyWifi = prefs.getBoolean("downloadOnlyWifi", true)
+        )
+    }
+
+    private fun persistSettings(settings: AppSettings) {
+        prefs.edit()
+            .putString("colorScheme", settings.colorScheme)
+            .putString("themeMode", settings.themeMode)
+            .putBoolean("isAmoledBlack", settings.isAmoledBlack)
+            .putBoolean("showQuickFilters", settings.showQuickFilters)
+            .putBoolean("showReadingProgress", settings.showReadingProgress)
+            .putBoolean("showFloatingContinue", settings.showFloatingContinue)
+            .putBoolean("showNavLabels", settings.showNavLabels)
+            .putBoolean("liquidGlassNavEnabled", settings.liquidGlassNavEnabled)
+            .putString("liquidGlassIntensity", settings.liquidGlassIntensity)
+            .putFloat("liquidGlassBlurDp", settings.liquidGlassBlurDp)
+            .putFloat("liquidGlassRefractionDp", settings.liquidGlassRefractionDp)
+            .putString("liquidGlassChromaticAberration", settings.liquidGlassChromaticAberration)
+            .putBoolean("liquidGlassRimHighlight", settings.liquidGlassRimHighlight)
+            .putBoolean("liquidGlassGelPress", settings.liquidGlassGelPress)
+            .putString("liquidGlassTintOption", settings.liquidGlassTintOption)
+            .putLong("liquidGlassCustomTintColor", settings.liquidGlassCustomTintColor)
+            .putFloat("liquidGlassTransparency", settings.liquidGlassTransparency)
+            .putBoolean("liquidGlassReducedTransparency", settings.liquidGlassReducedTransparency)
+            .putString("liquidGlassPerformanceMode", settings.liquidGlassPerformanceMode)
+            .putBoolean("disableNsfw", settings.disableNsfw)
+            .putBoolean("chooseMirrorAuto", settings.chooseMirrorAuto)
+            .putBoolean("keepScreenOn", settings.keepScreenOn)
+            .putBoolean("fullscreenMode", settings.fullscreenMode)
+            .putBoolean("preloadPagesWifiOnly", settings.preloadPagesWifiOnly)
+            .putBoolean("downloadOnlyWifi", settings.downloadOnlyWifi)
+            .apply()
     }
 
     fun clearHistory() {
