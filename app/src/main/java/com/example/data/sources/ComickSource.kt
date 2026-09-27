@@ -181,7 +181,7 @@ class ComickSource(
             val mdCovers = obj.optJSONArray("md_covers")
             val b2key = mdCovers?.optJSONObject(0)?.optString("b2key") ?: ""
             val coverUrl = if (b2key.isNotEmpty()) "https://meo.comick.pictures/$b2key"
-            else "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80"
+            else "https://cdn.myanimelist.net/images/manga/3/232056.jpg"
 
             result.add(
                 Manga(
@@ -205,7 +205,7 @@ class ComickSource(
         val mdCovers = json.optJSONArray("md_covers")
         val b2key = mdCovers?.optJSONObject(0)?.optString("b2key") ?: ""
         val coverUrl = if (b2key.isNotEmpty()) "https://meo.comick.pictures/$b2key"
-        else "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80"
+        else "https://cdn.myanimelist.net/images/manga/3/258224.jpg"
 
         return Manga(
             id = "comick_$slug",
@@ -219,37 +219,7 @@ class ComickSource(
     }
 
     private fun getFallbackMangaList(): List<Manga> {
-        return listOf(
-            Manga(
-                id = "comick_brainrot_girlfriend",
-                sourceId = "comick",
-                title = "Brainrot Girlfriend",
-                altTitle = "My Gyaru Brainrot",
-                author = "Twison",
-                description = "When a wholesome guy starts dating an internet-addicted meme gyaru girlfriend, chaos and cute romance ensue.",
-                coverUrl = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
-                status = "Ongoing",
-                rating = 9.4f,
-                genres = listOf("Romance", "Comedy", "Gyaru", "Webtoon"),
-                category = "Reading",
-                inLibrary = true,
-                totalChapters = 45,
-                readProgressPercent = 100
-            ),
-            Manga(
-                id = "comick_useless_genie",
-                sourceId = "comick",
-                title = "The Useless Genie and her Intrusive Master",
-                altTitle = "Genie Master",
-                author = "Aladdin Studio",
-                description = "He rubbed the lamp expecting three wishes, but got a shut-in genie who refuses to leave his living room.",
-                coverUrl = "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=600&auto=format&fit=crop&q=80",
-                status = "Ongoing",
-                rating = 8.7f,
-                genres = listOf("Comedy", "Fantasy", "Slice of Life"),
-                totalChapters = 15
-            )
-        )
+        return SourceCatalogDataProvider.getMangaForSource("comick", "ComicK", "Manga", "en")
     }
 
     private fun getFallbackChapters(mangaId: String): List<Chapter> {
@@ -270,9 +240,9 @@ class ComickSource(
 
     private fun getFallbackPages(chapterId: String): List<MangaPage> {
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1563089145-599997674d42?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/3/222299.jpg",
+            "https://cdn.myanimelist.net/images/manga/2/253119.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/188896.jpg"
         )
         return sampleUrls.mapIndexed { index, url ->
             MangaPage(index = index + 1, imageUrl = url)

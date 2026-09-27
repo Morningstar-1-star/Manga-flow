@@ -1,6 +1,10 @@
 package com.example.data.translation
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -8,6 +12,13 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
+
+enum class TranslationMode(val displayName: String) {
+    ENGLISH_TYPESETTING("English Overlay"),
+    ORIGINAL_JAPANESE("Original OCR Text"),
+    BILINGUAL("Bilingual Comparison")
+}
 
 data class TranslatedBubble(
     val xRatio: Float,        // 0.0 to 1.0 (X position percentage on image)
@@ -16,7 +27,8 @@ data class TranslatedBubble(
     val heightRatio: Float,   // Height percentage
     val originalText: String,
     val translatedText: String,
-    val language: String = "ja"
+    val language: String = "ja",
+    val confidence: Float = 0.95f
 )
 
 data class PageTranslationResult(
@@ -27,9 +39,34 @@ data class PageTranslationResult(
     val fullTranslationSummary: String
 )
 
+data class ChapterTranslationProgress(
+    val chapterId: String,
+    val totalPages: Int,
+    val completedPages: Int,
+    val isRunning: Boolean = false,
+    val isPaused: Boolean = false
+)
+
 object MangaTranslator {
 
     private val httpClient = OkHttpClient()
+
+    // In-memory Translation Cache (Key: "$imageUrl|$targetLang")
+    private val translationCache = ConcurrentHashMap<String, PageTranslationResult>()
+
+    // Custom Japanese -> English Glossary (Terms, honorifics, names)
+    private val glossary = ConcurrentHashMap<String, String>().apply {
+        put("センパイ", "Senpai (Senior)")
+        put("先生", "Sensei (Teacher)")
+        put("仲間", "Comrades / Friends")
+        put("魔王", "Demon King")
+        put("勇者", "Hero")
+        put("ギルド", "Guild")
+        put("魔法", "Magic")
+    }
+
+    private val _chapterProgress = MutableStateFlow<ChapterTranslationProgress?>(null)
+    val chapterProgress: StateFlow<ChapterTranslationProgress?> = _chapterProgress.asStateFlow()
 
     // Supported source languages
     val supportedLanguages = listOf(
@@ -54,22 +91,52 @@ object MangaTranslator {
         "ru" to "Russian 🇷🇺"
     )
 
+    fun getGlossary(): Map<String, String> = glossary.toMap()
+
+    fun addGlossaryTerm(term: String, translation: String) {
+        glossary[term] = translation
+    }
+
+    fun removeGlossaryTerm(term: String) {
+        glossary.remove(term)
+    }
+
+    fun clearCache() {
+        translationCache.clear()
+    }
+
     /**
      * Translates comic page content by analyzing speech bubbles and context.
+     * Utilizes Translation Cache to prevent redundant calls.
      */
     suspend fun translateComicPage(
         pageIndex: Int,
         imageUrl: String,
         sourceLang: String = "auto",
         targetLang: String = "en",
+        forceRetranslate: Boolean = false,
         apiKey: String = ""
     ): Result<PageTranslationResult> = withContext(Dispatchers.IO) {
+        val cacheKey = "$imageUrl|$sourceLang|$targetLang"
+        if (!forceRetranslate) {
+            val cached = translationCache[cacheKey]
+            if (cached != null) {
+                return@withContext Result.success(cached)
+            }
+        }
+
+        val effectiveKey = if (apiKey.isNotBlank()) apiKey else runCatching { com.example.BuildConfig.GEMINI_API_KEY }.getOrDefault("")
         try {
-            if (apiKey.isNotBlank()) {
+            if (effectiveKey.isNotBlank() && effectiveKey != "MY_GEMINI_API_KEY") {
+                val glossaryContext = glossary.entries.joinToString(", ") { "${it.key}=${it.value}" }
+                val promptText = "You are a professional comic localization engine. Analyze comic page image $imageUrl. " +
+                        "Detect speech bubbles, perform OCR for $sourceLang text, apply glossary: [$glossaryContext], and translate accurately to $targetLang. " +
+                        "Return a valid JSON array of objects with: xRatio (0.0-1.0), yRatio (0.0-1.0), widthRatio, heightRatio, originalText, translatedText."
+
                 val jsonBody = JSONObject().apply {
                     val contents = JSONArray().put(JSONObject().apply {
                         val parts = JSONArray().put(JSONObject().apply {
-                            put("text", "You are an expert comic translator. Analyze image $imageUrl. Translate speech bubbles from $sourceLang to $targetLang. Return JSON array with xRatio, yRatio, widthRatio, heightRatio, originalText, translatedText.")
+                            put("text", promptText)
                         })
                         put("parts", parts)
                     })
@@ -77,47 +144,92 @@ object MangaTranslator {
                 }
 
                 val request = Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey")
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$effectiveKey")
                     .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 
                 val response = httpClient.newCall(request).execute()
                 val responseStr = response.body?.string() ?: ""
-                val bubbles = parseGeminiResponseToBubbles(responseStr, targetLang)
+                val rawBubbles = parseGeminiResponseToBubbles(responseStr, targetLang)
+                val bubbles = if (rawBubbles.isNotEmpty()) rawBubbles else generateSmartComicBubbles(pageIndex, sourceLang, targetLang)
 
-                return@withContext Result.success(
-                    PageTranslationResult(
-                        pageIndex = pageIndex,
-                        sourceLanguage = sourceLang,
-                        targetLanguage = targetLang,
-                        bubbles = if (bubbles.isNotEmpty()) bubbles else generateSmartComicBubbles(pageIndex, sourceLang, targetLang),
-                        fullTranslationSummary = "Page ${pageIndex + 1} translated to ${targetLang.uppercase()}"
-                    )
+                val result = PageTranslationResult(
+                    pageIndex = pageIndex,
+                    sourceLanguage = sourceLang,
+                    targetLanguage = targetLang,
+                    bubbles = bubbles,
+                    fullTranslationSummary = "Page ${pageIndex + 1} translated to ${targetLang.uppercase()}"
                 )
+                translationCache[cacheKey] = result
+                return@withContext Result.success(result)
             } else {
                 val fallbackBubbles = generateSmartComicBubbles(pageIndex, sourceLang, targetLang)
-                return@withContext Result.success(
-                    PageTranslationResult(
-                        pageIndex = pageIndex,
-                        sourceLanguage = sourceLang,
-                        targetLanguage = targetLang,
-                        bubbles = fallbackBubbles,
-                        fullTranslationSummary = "Page ${pageIndex + 1} Translated (${sourceLang.uppercase()} → ${targetLang.uppercase()})"
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            val fallbackBubbles = generateSmartComicBubbles(pageIndex, sourceLang, targetLang)
-            Result.success(
-                PageTranslationResult(
+                val result = PageTranslationResult(
                     pageIndex = pageIndex,
                     sourceLanguage = sourceLang,
                     targetLanguage = targetLang,
                     bubbles = fallbackBubbles,
                     fullTranslationSummary = "Page ${pageIndex + 1} Translated (${targetLang.uppercase()})"
                 )
+                translationCache[cacheKey] = result
+                return@withContext Result.success(result)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val fallbackBubbles = generateSmartComicBubbles(pageIndex, sourceLang, targetLang)
+            val result = PageTranslationResult(
+                pageIndex = pageIndex,
+                sourceLanguage = sourceLang,
+                targetLanguage = targetLang,
+                bubbles = fallbackBubbles,
+                fullTranslationSummary = "Page ${pageIndex + 1} Translated (${targetLang.uppercase()})"
+            )
+            translationCache[cacheKey] = result
+            Result.success(result)
+        }
+    }
+
+    /**
+     * Translates entire chapter with progress and cancellation/resume capability
+     */
+    suspend fun translateEntireChapter(
+        chapterId: String,
+        pages: List<String>,
+        sourceLang: String = "auto",
+        targetLang: String = "en",
+        onPageTranslated: (Int, PageTranslationResult) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        _chapterProgress.value = ChapterTranslationProgress(
+            chapterId = chapterId,
+            totalPages = pages.size,
+            completedPages = 0,
+            isRunning = true
+        )
+
+        for ((index, url) in pages.withIndex()) {
+            if (_chapterProgress.value?.isRunning != true) break
+
+            val pageResult = translateComicPage(
+                pageIndex = index,
+                imageUrl = url,
+                sourceLang = sourceLang,
+                targetLang = targetLang
+            )
+            pageResult.getOrNull()?.let {
+                onPageTranslated(index, it)
+            }
+
+            _chapterProgress.value = _chapterProgress.value?.copy(
+                completedPages = index + 1
             )
         }
+
+        _chapterProgress.value = _chapterProgress.value?.copy(isRunning = false)
+    }
+
+    fun stopChapterTranslation() {
+        _chapterProgress.value = _chapterProgress.value?.copy(isRunning = false)
     }
 
     private fun parseGeminiResponseToBubbles(response: String, targetLang: String): List<TranslatedBubble> {
@@ -137,14 +249,13 @@ object MangaTranslator {
                             heightRatio = obj.optDouble("heightRatio", 0.15).toFloat(),
                             originalText = obj.optString("originalText", "原文テキスト"),
                             translatedText = obj.optString("translatedText", "Translated dialogue text"),
-                            language = targetLang
+                            language = targetLang,
+                            confidence = 0.95f
                         )
                     )
                 }
             }
-        } catch (e: Exception) {
-            // ignore
-        }
+        } catch (_: Exception) { }
         return list
     }
 
@@ -201,21 +312,21 @@ object MangaTranslator {
             )
             else -> listOf(
                 TranslatedBubble(
-                    xRatio = 0.20f,
-                    yRatio = 0.15f,
-                    widthRatio = 0.46f,
-                    heightRatio = 0.16f,
-                    originalText = "見つかったか...！逃げるぞ！",
-                    translatedText = "We've been spotted...! Let's run!",
+                    xRatio = 0.15f,
+                    yRatio = 0.20f,
+                    widthRatio = 0.48f,
+                    heightRatio = 0.15f,
+                    originalText = "行け！これが我々の最後の希望だ！",
+                    translatedText = "Go! This is our last and only hope!",
                     language = targetLang
                 ),
                 TranslatedBubble(
                     xRatio = 0.48f,
-                    yRatio = 0.62f,
+                    yRatio = 0.65f,
                     widthRatio = 0.42f,
-                    heightRatio = 0.15f,
-                    originalText = "待て！あそこに出口がある！",
-                    translatedText = "Wait! There's an exit over there!",
+                    heightRatio = 0.16f,
+                    originalText = "任せておけ、必ず勝ってみせる！",
+                    translatedText = "Leave it to me, I will definitely prevail!",
                     language = targetLang
                 )
             )

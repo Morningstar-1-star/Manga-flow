@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -35,6 +38,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -77,6 +81,8 @@ fun SearchScreen(
     onNavigateToMangaDetails: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val activeSourceId by viewModel.selectedSourceId.collectAsState()
+    val allSources by viewModel.sources.collectAsState()
     val query by viewModel.searchQuery.collectAsState()
     val results by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
@@ -86,9 +92,25 @@ fun SearchScreen(
     var showFilterBottomSheet by remember { mutableStateOf(false) }
 
     val quickFilterChips = listOf("All", "Completed", "Ongoing", "Romance", "Action", "Comedy", "Webtoon")
+    
+    // Dynamic source list matching all enabled sources
+    val sourceFilterChips = remember(allSources) {
+        listOf("All Sources") + allSources.filter { it.isEnabled }.map { it.name }
+    }
 
-    val filteredResults = remember(results, searchFilter, selectedFilterChip) {
+    val currentChipName = remember(activeSourceId, allSources) {
+        if (activeSourceId == null) {
+            "All Sources"
+        } else {
+            allSources.find { it.id.equals(activeSourceId, ignoreCase = true) }?.name
+                ?: activeSourceId ?: "All Sources"
+        }
+    }
+
+    val filteredResults = remember(results, searchFilter, selectedFilterChip, activeSourceId) {
         results.filter { manga ->
+            val matchesSource = activeSourceId == null || manga.sourceId.equals(activeSourceId, ignoreCase = true)
+
             val matchesStatus = searchFilter.selectedStatus == "All" || manga.status.equals(searchFilter.selectedStatus, ignoreCase = true)
             val matchesChip = selectedFilterChip == "All" ||
                     (selectedFilterChip == "Completed" && manga.status.equals("Completed", ignoreCase = true)) ||
@@ -97,9 +119,12 @@ fun SearchScreen(
             val matchesGenres = searchFilter.selectedGenres.isEmpty() ||
                     searchFilter.selectedGenres.all { genre -> manga.genres.any { it.equals(genre, ignoreCase = true) } }
 
-            matchesStatus && matchesChip && matchesGenres
+            matchesSource && matchesStatus && matchesChip && matchesGenres
         }
     }
+
+    val appBgColor = MaterialTheme.colorScheme.background
+    val appSurfaceColor = MaterialTheme.colorScheme.surface
 
     Scaffold(
         topBar = {
@@ -131,8 +156,8 @@ fun SearchScreen(
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = KotatsuTeal,
                                 unfocusedBorderColor = KotatsuCardBorder,
-                                focusedContainerColor = KotatsuDarkSurface,
-                                unfocusedContainerColor = KotatsuDarkSurface,
+                                focusedContainerColor = appSurfaceColor,
+                                unfocusedContainerColor = appSurfaceColor,
                                 focusedTextColor = KotatsuTextPrimary,
                                 unfocusedTextColor = KotatsuTextPrimary
                             )
@@ -140,13 +165,13 @@ fun SearchScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Dedicated Filter Button (Requirement 4)
+                        // Dedicated Filter Button
                         Surface(
                             modifier = Modifier
                                 .size(46.dp)
                                 .clickable { showFilterBottomSheet = true },
                             shape = CircleShape,
-                            color = KotatsuDarkSurface,
+                            color = appSurfaceColor,
                             border = androidx.compose.foundation.BorderStroke(1.dp, KotatsuTeal)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -169,10 +194,10 @@ fun SearchScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = KotatsuDarkBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = appBgColor)
             )
         },
-        containerColor = KotatsuDarkBg,
+        containerColor = appBgColor,
         modifier = modifier
     ) { innerPadding ->
         Column(
@@ -181,11 +206,27 @@ fun SearchScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
+            // Source filter bar with ALL sources!
+            FilterChipRow(
+                chips = sourceFilterChips,
+                selectedChip = currentChipName,
+                onChipSelected = { chip ->
+                    if (chip == "All Sources") {
+                        viewModel.selectSourceFeed(null)
+                    } else {
+                        val found = allSources.find { it.name.equals(chip, ignoreCase = true) }
+                        viewModel.selectSourceFeed(found?.id)
+                    }
+                },
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            )
+
+            // Genre & Status filter bar
             FilterChipRow(
                 chips = quickFilterChips,
                 selectedChip = selectedFilterChip,
                 onChipSelected = { viewModel.onFilterChipSelected(it) },
-                modifier = Modifier.padding(vertical = 10.dp)
+                modifier = Modifier.padding(bottom = 8.dp)
             )
 
             if (isSearching) {
@@ -217,6 +258,79 @@ fun SearchScreen(
                             color = KotatsuTeal,
                             fontSize = 13.sp
                         )
+                    }
+                }
+            } else if (activeSourceId == null && query.isNotEmpty()) {
+                // Multi-source search with clear separation by source!
+                val groupedBySource = remember(filteredResults) {
+                    filteredResults.groupBy { it.sourceId }
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    groupedBySource.forEach { (sourceId, sourceMangaList) ->
+                        val sourceObj = allSources.find { it.id.equals(sourceId, ignoreCase = true) }
+                        val srcDisplayName = sourceObj?.name ?: sourceId
+                        val srcEmoji = sourceObj?.iconEmoji ?: "📖"
+
+                        item(key = "header_$sourceId") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(srcEmoji, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = srcDisplayName,
+                                        color = KotatsuTextPrimary,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = KotatsuTealContainer
+                                    ) {
+                                        Text(
+                                            text = "${sourceMangaList.size}",
+                                            color = KotatsuTeal,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Focus Source →",
+                                    color = KotatsuTeal,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .clickable { viewModel.selectSourceFeed(sourceId) }
+                                        .padding(4.dp)
+                                )
+                            }
+                        }
+
+                        item(key = "row_$sourceId") {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(sourceMangaList) { manga ->
+                                    MangaCard(
+                                        manga = manga,
+                                        progressPercent = if (manga.readProgressPercent > 0) manga.readProgressPercent else null,
+                                        onClick = { onNavigateToMangaDetails(manga.id, manga.sourceId) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             } else {

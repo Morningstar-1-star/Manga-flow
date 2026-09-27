@@ -8,13 +8,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.transformable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,34 +33,32 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
-import com.example.data.translation.TranslatedBubble
-import com.example.ui.components.ComicTranslationOverlay
-import com.example.ui.components.ReaderGridSheet
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,6 +69,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -79,21 +81,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
+import coil.imageLoader
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.data.model.MangaPage
 import com.example.data.model.ReadMode
+import com.example.data.translation.TranslatedBubble
+import com.example.data.translation.TranslationMode
+import com.example.ui.components.ComicTranslationOverlay
 import com.example.ui.components.ReaderControlsSheet
-import com.example.ui.theme.KotatsuDarkBg
+import com.example.ui.components.ReaderGridSheet
 import com.example.ui.theme.KotatsuDarkSurface
 import com.example.ui.theme.KotatsuTeal
-import com.example.ui.theme.KotatsuTextPrimary
 import com.example.ui.theme.KotatsuTextSecondary
 import com.example.ui.viewmodel.MangaViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
-/**
- * Reader Screen - Replicating Screenshot 5!
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
@@ -106,7 +109,6 @@ fun ReaderScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // Keep screen on while reading
     DisposableEffect(Unit) {
@@ -132,7 +134,9 @@ fun ReaderScreen(
     val isTranslatingPage by viewModel.isTranslatingPage.collectAsState()
     val targetLanguage by viewModel.translationTargetLanguage.collectAsState()
     val translatedBubblesMap by viewModel.translatedBubblesMap.collectAsState()
+    val translationMode by viewModel.translationMode.collectAsState()
     val readerColorFilter by viewModel.readerColorFilter.collectAsState()
+    val readerBrightness by viewModel.readerBrightness.collectAsState()
     val currentPageIndex by viewModel.currentPageIndex.collectAsState()
 
     var showControls by remember { mutableStateOf(false) }
@@ -177,7 +181,9 @@ fun ReaderScreen(
                     WebtoonReader(
                         pages = pages,
                         autoScroll = autoScroll,
+                        colorFilterName = readerColorFilter,
                         isTranslationActive = isTranslationActive,
+                        translationMode = translationMode,
                         translatedBubblesMap = translatedBubblesMap,
                         onPageChange = { viewModel.setPageIndex(it) }
                     )
@@ -186,7 +192,10 @@ fun ReaderScreen(
                     PagedHorizontalReader(
                         pages = pages,
                         isRtl = false,
+                        useTwoPageLayout = useTwoPageLayout,
+                        colorFilterName = readerColorFilter,
                         isTranslationActive = isTranslationActive,
+                        translationMode = translationMode,
                         translatedBubblesMap = translatedBubblesMap,
                         onPageChange = { viewModel.setPageIndex(it) }
                     )
@@ -195,7 +204,10 @@ fun ReaderScreen(
                     PagedHorizontalReader(
                         pages = pages,
                         isRtl = true,
+                        useTwoPageLayout = useTwoPageLayout,
+                        colorFilterName = readerColorFilter,
                         isTranslationActive = isTranslationActive,
+                        translationMode = translationMode,
                         translatedBubblesMap = translatedBubblesMap,
                         onPageChange = { viewModel.setPageIndex(it) }
                     )
@@ -203,7 +215,9 @@ fun ReaderScreen(
                 ReadMode.VERTICAL -> {
                     PagedVerticalReader(
                         pages = pages,
+                        colorFilterName = readerColorFilter,
                         isTranslationActive = isTranslationActive,
+                        translationMode = translationMode,
                         translatedBubblesMap = translatedBubblesMap,
                         onPageChange = { viewModel.setPageIndex(it) }
                     )
@@ -211,7 +225,16 @@ fun ReaderScreen(
             }
         }
 
-        // Top App Bar (shown when tapped, matching Screenshot 5 top bar!)
+        // Screen Brightness Overlay
+        if (readerBrightness < 0.98f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = (1f - readerBrightness).coerceIn(0f, 0.8f)))
+            )
+        }
+
+        // Top App Bar
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn() + slideInVertically(),
@@ -306,7 +329,7 @@ fun ReaderScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (isTranslatingPage) "Translating comic page..." else "AI Translation Active (${targetLanguage.uppercase()})",
+                            text = if (isTranslatingPage) "Translating comic page..." else "AI Translation Active (${targetLanguage.uppercase()} • ${translationMode.displayName})",
                             color = Color.Black,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -316,7 +339,7 @@ fun ReaderScreen(
             }
         }
 
-        // Controls Bottom Sheet (Matches Screenshot 5)
+        // Controls Bottom Sheet
         if (showSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showSheet = false },
@@ -332,10 +355,16 @@ fun ReaderScreen(
                     onTwoPageLayoutChange = { viewModel.toggleTwoPageLayout(it) },
                     autoScroll = autoScroll,
                     onAutoScrollChange = { viewModel.toggleAutoScroll(it) },
+                    currentColorFilter = readerColorFilter,
+                    onColorFilterChange = { viewModel.setReaderColorFilter(it) },
+                    brightness = readerBrightness,
+                    onBrightnessChange = { viewModel.setReaderBrightness(it) },
                     isTranslationActive = isTranslationActive,
                     onTranslationActiveChange = { viewModel.toggleTranslationActive(it) },
                     targetLanguage = targetLanguage,
                     onLanguageChange = { viewModel.setTranslationTargetLanguage(it) },
+                    translationMode = translationMode,
+                    onTranslationModeChange = { viewModel.setTranslationMode(it) },
                     onSavePage = {
                         showSheet = false
                     },
@@ -358,7 +387,7 @@ fun ReaderScreen(
             }
         }
 
-        // Page Grid Thumbnail Sheet (Matches Screenshot 3!)
+        // Page Grid Thumbnail Sheet
         if (showGridSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showGridSheet = false },
@@ -379,20 +408,20 @@ fun ReaderScreen(
     }
 }
 
-/**
- * Continuous Webtoon Vertical Scrolling Mode
- */
 @Composable
 private fun WebtoonReader(
     pages: List<MangaPage>,
     autoScroll: Boolean,
+    colorFilterName: String,
     isTranslationActive: Boolean,
+    translationMode: TranslationMode,
     translatedBubblesMap: Map<Int, List<TranslatedBubble>>,
     onPageChange: (Int) -> Unit
 ) {
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
 
-    // Smooth auto scroll loop if enabled
     LaunchedEffect(autoScroll) {
         if (autoScroll) {
             while (true) {
@@ -405,6 +434,17 @@ private fun WebtoonReader(
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
             onPageChange(index)
+            for (step in 1..3) {
+                val nextIdx = index + step
+                if (nextIdx in pages.indices) {
+                    val req = ImageRequest.Builder(context)
+                        .data(pages[nextIdx].imageUrl)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .build()
+                    imageLoader.enqueue(req)
+                }
+            }
         }
     }
 
@@ -412,75 +452,138 @@ private fun WebtoonReader(
         state = listState,
         modifier = Modifier.fillMaxSize()
     ) {
-        itemsIndexed(pages) { index, page ->
+        itemsIndexed(pages, key = { _, page -> "${page.imageUrl}_${page.index}" }) { index, page ->
             ZoomablePageImage(
                 imageUrl = page.imageUrl,
-                pageNumber = index + 1,
+                pageNumber = page.index,
+                colorFilterName = colorFilterName,
                 isTranslationActive = isTranslationActive,
+                translationMode = translationMode,
                 translatedBubbles = translatedBubblesMap[index]
             )
         }
     }
 }
 
-/**
- * Horizontal Paged Reader (LTR and RTL)
- */
 @Composable
 private fun PagedHorizontalReader(
     pages: List<MangaPage>,
     isRtl: Boolean,
+    useTwoPageLayout: Boolean,
+    colorFilterName: String,
     isTranslationActive: Boolean,
+    translationMode: TranslationMode,
     translatedBubblesMap: Map<Int, List<TranslatedBubble>>,
     onPageChange: (Int) -> Unit
 ) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
 
     LaunchedEffect(pagerState.currentPage) {
         val actualIndex = if (isRtl) pages.size - 1 - pagerState.currentPage else pagerState.currentPage
         onPageChange(actualIndex)
+
+        for (step in 1..3) {
+            val nextIdx = actualIndex + step
+            if (nextIdx in pages.indices) {
+                val req = ImageRequest.Builder(context)
+                    .data(pages[nextIdx].imageUrl)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .build()
+                imageLoader.enqueue(req)
+            }
+        }
     }
 
     HorizontalPager(
         state = pagerState,
+        beyondViewportPageCount = 2,
         modifier = Modifier.fillMaxSize(),
         reverseLayout = isRtl
     ) { pageIndex ->
         val actualIdx = if (isRtl) pages.size - 1 - pageIndex else pageIndex
         val actualPage = pages[actualIdx]
-        ZoomablePageImage(
-            imageUrl = actualPage.imageUrl,
-            pageNumber = actualPage.index,
-            isTranslationActive = isTranslationActive,
-            translatedBubbles = translatedBubblesMap[actualIdx]
-        )
+
+        if (useTwoPageLayout && actualIdx + 1 < pages.size) {
+            val secondPage = pages[actualIdx + 1]
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    ZoomablePageImage(
+                        imageUrl = actualPage.imageUrl,
+                        pageNumber = actualPage.index,
+                        colorFilterName = colorFilterName,
+                        isTranslationActive = isTranslationActive,
+                        translationMode = translationMode,
+                        translatedBubbles = translatedBubblesMap[actualIdx]
+                    )
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    ZoomablePageImage(
+                        imageUrl = secondPage.imageUrl,
+                        pageNumber = secondPage.index,
+                        colorFilterName = colorFilterName,
+                        isTranslationActive = isTranslationActive,
+                        translationMode = translationMode,
+                        translatedBubbles = translatedBubblesMap[actualIdx + 1]
+                    )
+                }
+            }
+        } else {
+            ZoomablePageImage(
+                imageUrl = actualPage.imageUrl,
+                pageNumber = actualPage.index,
+                colorFilterName = colorFilterName,
+                isTranslationActive = isTranslationActive,
+                translationMode = translationMode,
+                translatedBubbles = translatedBubblesMap[actualIdx]
+            )
+        }
     }
 }
 
-/**
- * Vertical Paged Reader
- */
 @Composable
 private fun PagedVerticalReader(
     pages: List<MangaPage>,
+    colorFilterName: String,
     isTranslationActive: Boolean,
+    translationMode: TranslationMode,
     translatedBubblesMap: Map<Int, List<TranslatedBubble>>,
     onPageChange: (Int) -> Unit
 ) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
 
     LaunchedEffect(pagerState.currentPage) {
-        onPageChange(pagerState.currentPage)
+        val index = pagerState.currentPage
+        onPageChange(index)
+
+        for (step in 1..3) {
+            val nextIdx = index + step
+            if (nextIdx in pages.indices) {
+                val req = ImageRequest.Builder(context)
+                    .data(pages[nextIdx].imageUrl)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .build()
+                imageLoader.enqueue(req)
+            }
+        }
     }
 
     VerticalPager(
         state = pagerState,
+        beyondViewportPageCount = 2,
         modifier = Modifier.fillMaxSize()
     ) { pageIndex ->
         ZoomablePageImage(
             imageUrl = pages[pageIndex].imageUrl,
             pageNumber = pages[pageIndex].index,
+            colorFilterName = colorFilterName,
             isTranslationActive = isTranslationActive,
+            translationMode = translationMode,
             translatedBubbles = translatedBubblesMap[pageIndex]
         )
     }
@@ -490,20 +593,75 @@ private fun PagedVerticalReader(
 private fun ZoomablePageImage(
     imageUrl: String,
     pageNumber: Int,
+    colorFilterName: String = "None",
     isTranslationActive: Boolean = false,
+    translationMode: TranslationMode = TranslationMode.ENGLISH_TYPESETTING,
     translatedBubbles: List<TranslatedBubble>? = null
 ) {
+    val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    var reloadCount by remember { mutableIntStateOf(0) }
+
+    val colorFilter = remember(colorFilterName) {
+        when (colorFilterName) {
+            "Invert" -> ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -1f, 0f, 0f, 0f, 255f,
+                        0f, -1f, 0f, 0f, 255f,
+                        0f, 0f, -1f, 0f, 255f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
+            )
+            "Grayscale" -> ColorFilter.colorMatrix(
+                ColorMatrix().apply { setToSaturation(0f) }
+            )
+            "Sepia" -> ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        0.393f, 0.769f, 0.189f, 0f, 0f,
+                        0.349f, 0.686f, 0.168f, 0f, 0f,
+                        0.272f, 0.534f, 0.131f, 0f, 0f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
+            )
+            "High Contrast" -> ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        1.4f, 0f, 0f, 0f, -30f,
+                        0f, 1.4f, 0f, 0f, -30f,
+                        0f, 0f, 1.4f, 0f, -30f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
+            )
+            else -> null
+        }
+    }
 
     val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
-        scale = (scale * zoomChange).coerceIn(1f, 3.5f)
+        scale = (scale * zoomChange).coerceIn(1f, 5.0f)
         offset = if (scale > 1f) offset + offsetChange else Offset.Zero
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        if (scale > 1.2f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            scale = 2.5f
+                        }
+                    }
+                )
+            }
             .transformable(state = transformState)
             .graphicsLayer(
                 scaleX = scale,
@@ -513,10 +671,20 @@ private fun ZoomablePageImage(
             ),
         contentAlignment = Alignment.Center
     ) {
+        val imageModel = remember(imageUrl, reloadCount) {
+            ImageRequest.Builder(context)
+                .data(imageUrl)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .setParameter("reload", reloadCount)
+                .build()
+        }
+
         SubcomposeAsyncImage(
-            model = imageUrl,
+            model = imageModel,
             contentDescription = "Page $pageNumber",
             contentScale = ContentScale.FillWidth,
+            colorFilter = colorFilter,
             loading = {
                 Box(
                     modifier = Modifier
@@ -532,18 +700,29 @@ private fun ZoomablePageImage(
                 }
             },
             error = {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(260.dp)
                         .background(Color(0xFF1F1D24)),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = "Page $pageNumber",
                         color = KotatsuTextSecondary,
                         fontSize = 14.sp
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { reloadCount++ },
+                        shape = CircleShape,
+                        border = BorderStroke(1.dp, KotatsuTeal)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = KotatsuTeal, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Retry loading", color = KotatsuTeal, fontSize = 12.sp)
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -553,8 +732,59 @@ private fun ZoomablePageImage(
         if (isTranslationActive && !translatedBubbles.isNullOrEmpty()) {
             ComicTranslationOverlay(
                 bubbles = translatedBubbles,
+                mode = translationMode,
                 modifier = Modifier.matchParentSize()
             )
+        }
+
+        // Floating Zoom Controls Bar
+        if (scale > 1.05f) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Black.copy(alpha = 0.82f),
+                border = BorderStroke(1.dp, KotatsuTeal)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "${(scale * 100).toInt()}%",
+                        color = KotatsuTeal,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    IconButton(
+                        onClick = { scale = (scale + 0.5f).coerceAtMost(5.0f) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text("+", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(
+                        onClick = {
+                            scale = (scale - 0.5f).coerceAtLeast(1.0f)
+                            if (scale <= 1.0f) offset = Offset.Zero
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text("-", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(
+                        onClick = {
+                            scale = 1.0f
+                            offset = Offset.Zero
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text("1:1", color = KotatsuTeal, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

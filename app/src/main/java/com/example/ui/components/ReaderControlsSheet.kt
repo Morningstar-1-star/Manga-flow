@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.ScreenRotation
@@ -26,23 +28,28 @@ import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ViewDay
 import androidx.compose.material.icons.outlined.ViewStream
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ReadMode
+import com.example.data.translation.TranslationMode
 import com.example.ui.theme.KotatsuCardBorder
 import com.example.ui.theme.KotatsuDarkSurface
 import com.example.ui.theme.KotatsuDarkSurfaceHigh
@@ -54,7 +61,7 @@ import com.example.ui.theme.KotatsuTextSecondary
 
 /**
  * In-reader overlay controls bottom sheet.
- * Exactly reproduces Screenshot 5!
+ * Includes Read Modes, Color Filters, Brightness, Auto-scroll, and AI Translation settings.
  */
 @Composable
 fun ReaderControlsSheet(
@@ -64,10 +71,16 @@ fun ReaderControlsSheet(
     onTwoPageLayoutChange: (Boolean) -> Unit,
     autoScroll: Boolean,
     onAutoScrollChange: (Boolean) -> Unit,
+    currentColorFilter: String = "None",
+    onColorFilterChange: (String) -> Unit = {},
+    brightness: Float = 1.0f,
+    onBrightnessChange: (Float) -> Unit = {},
     isTranslationActive: Boolean = false,
     onTranslationActiveChange: (Boolean) -> Unit = {},
     targetLanguage: String = "en",
     onLanguageChange: (String) -> Unit = {},
+    translationMode: TranslationMode = TranslationMode.ENGLISH_TYPESETTING,
+    onTranslationModeChange: (TranslationMode) -> Unit = {},
     onSavePage: () -> Unit,
     onRotateScreen: () -> Unit,
     onColorCorrection: () -> Unit,
@@ -75,6 +88,8 @@ fun ReaderControlsSheet(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showColorDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -105,7 +120,7 @@ fun ReaderControlsSheet(
         // Rotate screen action row
         SheetActionRow(
             icon = Icons.Default.ScreenRotation,
-            title = "Rotate screen",
+            title = "Rotate screen orientation",
             onClick = onRotateScreen
         )
 
@@ -163,7 +178,7 @@ fun ReaderControlsSheet(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "The chosen configuration will be remembered for this manga",
+            text = "Configuration is remembered automatically for this series",
             color = KotatsuTextSecondary,
             fontSize = 12.sp
         )
@@ -185,7 +200,7 @@ fun ReaderControlsSheet(
             )
             Spacer(modifier = Modifier.width(16.dp))
             Text(
-                text = "Use two pages layout on landscape ori...",
+                text = "Two pages layout (Landscape)",
                 color = KotatsuTextPrimary,
                 fontSize = 14.sp,
                 modifier = Modifier.weight(1f)
@@ -217,7 +232,7 @@ fun ReaderControlsSheet(
             )
             Spacer(modifier = Modifier.width(16.dp))
             Text(
-                text = "Automatic scroll",
+                text = "Automatic continuous scroll",
                 color = KotatsuTextPrimary,
                 fontSize = 14.sp,
                 modifier = Modifier.weight(1f)
@@ -233,6 +248,74 @@ fun ReaderControlsSheet(
                 )
             )
         }
+
+        // Brightness Slider
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.BrightnessMedium,
+                contentDescription = null,
+                tint = KotatsuTextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = "Brightness",
+                color = KotatsuTextPrimary,
+                fontSize = 14.sp,
+                modifier = Modifier.width(80.dp)
+            )
+            Slider(
+                value = brightness,
+                onValueChange = onBrightnessChange,
+                valueRange = 0.2f..1.0f,
+                colors = SliderDefaults.colors(
+                    thumbColor = KotatsuTeal,
+                    activeTrackColor = KotatsuTeal,
+                    inactiveTrackColor = KotatsuDarkSurfaceHigh
+                ),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Color Filter section
+        Text(
+            text = "Color filter: $currentColorFilter",
+            color = KotatsuTextPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("None", "Invert", "Grayscale", "Sepia", "High Contrast").forEach { filter ->
+                val isSelected = currentColorFilter == filter
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isSelected) KotatsuTealContainer else KotatsuDarkSurfaceHigh,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) KotatsuTeal else Color.Transparent),
+                    modifier = Modifier.clickable { onColorFilterChange(filter) }
+                ) {
+                    Text(
+                        text = filter,
+                        color = if (isSelected) KotatsuTeal else KotatsuTextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Switch: AI Manga Text Translator
         Row(
@@ -256,7 +339,7 @@ fun ReaderControlsSheet(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Translate speech bubbles to ${targetLanguage.uppercase()}",
+                    text = "Speech bubbles to ${targetLanguage.uppercase()}",
                     color = KotatsuTextSecondary,
                     fontSize = 11.sp
                 )
@@ -274,6 +357,7 @@ fun ReaderControlsSheet(
         }
 
         if (isTranslationActive) {
+            // Target Languages
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -299,16 +383,36 @@ fun ReaderControlsSheet(
                     }
                 }
             }
+
+            // Translation Modes
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TranslationMode.values().forEach { mode ->
+                    val selected = translationMode == mode
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) KotatsuTealContainer else KotatsuDarkSurfaceHigh)
+                            .border(1.dp, if (selected) KotatsuTeal else Color.Transparent, RoundedCornerShape(12.dp))
+                            .clickable { onTranslationModeChange(mode) }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = mode.displayName,
+                            color = if (selected) KotatsuTeal else KotatsuTextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Color correction
-        SheetActionRow(
-            icon = Icons.Default.AutoAwesome,
-            title = "Color correction",
-            onClick = onColorCorrection
-        )
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Preferred image server: Original quality
         SheetActionRow(

@@ -60,7 +60,10 @@ data class MangaSource(
     val isNsfw: Boolean = false,
     val iconEmoji: String = "📖",
     val brandColorHex: Long = 0xFF2DD4BF,
-    val reliability: Float = 0.98f
+    val reliability: Float = 0.98f,
+    val isOnline: Boolean = true,
+    val statusText: String = "Online",
+    val isCustom: Boolean = false
 )
 
 enum class ReadMode(val displayName: String) {

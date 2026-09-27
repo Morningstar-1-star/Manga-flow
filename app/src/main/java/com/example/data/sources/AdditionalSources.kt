@@ -22,34 +22,7 @@ class CuuTruyenSource : MangaSourceParser {
     )
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        Result.success(
-            listOf(
-                Manga(
-                    id = "cuutruyen_frieren",
-                    sourceId = source.id,
-                    title = "Sousou no Frieren",
-                    altTitle = "Pháp Sư Tiễn Táng",
-                    author = "Yamada Kanehito",
-                    description = "Câu chuyện về cuộc hành trình của pháp sư elf Frieren sau khi đánh bại Ma Vương.",
-                    coverUrl = "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=600&auto=format&fit=crop&q=80",
-                    status = "Ongoing",
-                    rating = 9.8f,
-                    genres = listOf("Fantasy", "Adventure", "Drama")
-                ),
-                Manga(
-                    id = "cuutruyen_dungeon_meshi",
-                    sourceId = source.id,
-                    title = "Dungeon Meshi",
-                    altTitle = "Mỹ Vị Hầm Ngục",
-                    author = "Kui Ryoko",
-                    description = "Nấu ăn trong hầm ngục để cứu em gái khỏi bụng rồng đỏ.",
-                    coverUrl = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&auto=format&fit=crop&q=80",
-                    status = "Finished",
-                    rating = 9.6f,
-                    genres = listOf("Cooking", "Fantasy", "Comedy")
-                )
-            )
-        )
+        Result.success(SourceCatalogDataProvider.getMangaForSource(source.id, source.name, "Manga", "vi"))
     }
 
     override suspend fun getLatestManga(page: Int): Result<List<Manga>> = getPopularManga(page)
@@ -80,9 +53,9 @@ class CuuTruyenSource : MangaSourceParser {
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1563089145-599997674d42?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/2/258237.jpg",
+            "https://cdn.myanimelist.net/images/manga/1/259070.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/54525.jpg"
         )
         Result.success(sampleUrls.mapIndexed { idx, url -> MangaPage(idx + 1, url) })
     }
@@ -102,22 +75,7 @@ class TruyenGGSource : MangaSourceParser {
     )
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        Result.success(
-            listOf(
-                Manga(
-                    id = "truyengg_solo_leveling",
-                    sourceId = source.id,
-                    title = "Solo Leveling: Ragnarok",
-                    altTitle = "Thăng Cấp Một Mình",
-                    author = "Chugong",
-                    description = "Hành trình của con trai Sung Jin-Woo bước vào thế giới thợ săn mới.",
-                    coverUrl = "https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80",
-                    status = "Ongoing",
-                    rating = 9.7f,
-                    genres = listOf("Action", "Fantasy", "Manhwa", "Webtoon")
-                )
-            )
-        )
+        Result.success(SourceCatalogDataProvider.getMangaForSource(source.id, source.name, "Manga", "vi"))
     }
 
     override suspend fun getLatestManga(page: Int): Result<List<Manga>> = getPopularManga(page)
@@ -148,8 +106,8 @@ class TruyenGGSource : MangaSourceParser {
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/258224.jpg"
         )
         Result.success(sampleUrls.mapIndexed { idx, url -> MangaPage(idx + 1, url) })
     }
@@ -169,22 +127,7 @@ class DocTruyen3QSource : MangaSourceParser {
     )
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        Result.success(
-            listOf(
-                Manga(
-                    id = "dt3q_omniscent",
-                    sourceId = source.id,
-                    title = "Omniscient Reader's Viewpoint",
-                    altTitle = "Toàn Trí Độc Giả",
-                    author = "Sing Shong",
-                    description = "Thế giới đột nhiên biến thành tiểu thuyết mà chỉ có Kim Dokja đọc đến chương cuối.",
-                    coverUrl = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
-                    status = "Ongoing",
-                    rating = 9.9f,
-                    genres = listOf("Action", "Apocalypse", "Fantasy", "Webtoon")
-                )
-            )
-        )
+        Result.success(SourceCatalogDataProvider.getMangaForSource(source.id, source.name, "Manga", "vi"))
     }
 
     override suspend fun getLatestManga(page: Int): Result<List<Manga>> = getPopularManga(page)
@@ -215,8 +158,8 @@ class DocTruyen3QSource : MangaSourceParser {
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1563089145-599997674d42?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/3/222299.jpg",
+            "https://cdn.myanimelist.net/images/manga/2/253119.jpg"
         )
         Result.success(sampleUrls.mapIndexed { idx, url -> MangaPage(idx + 1, url) })
     }
@@ -236,22 +179,7 @@ class BatoToSource : MangaSourceParser {
     )
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        Result.success(
-            listOf(
-                Manga(
-                    id = "batoto_villainess",
-                    sourceId = source.id,
-                    title = "Death Is the Only Ending for the Villainess",
-                    altTitle = "Akuyaku Reijou",
-                    author = "Gwon Gyeoeul",
-                    description = "Reincarnated into an otome game as the doomed villainess Penelope Eckart.",
-                    coverUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80",
-                    status = "Ongoing",
-                    rating = 9.8f,
-                    genres = listOf("Otome", "Romance", "Fantasy", "Drama")
-                )
-            )
-        )
+        Result.success(SourceCatalogDataProvider.getMangaForSource(source.id, source.name, "Manga", "en"))
     }
 
     override suspend fun getLatestManga(page: Int): Result<List<Manga>> = getPopularManga(page)
@@ -282,8 +210,8 @@ class BatoToSource : MangaSourceParser {
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/3/188896.jpg",
+            "https://cdn.myanimelist.net/images/manga/2/258237.jpg"
         )
         Result.success(sampleUrls.mapIndexed { idx, url -> MangaPage(idx + 1, url) })
     }
@@ -306,13 +234,13 @@ class LocalStorageSource : MangaSourceParser {
         Result.success(
             listOf(
                 Manga(
-                    id = "local_cbz_sample",
+                    id = "local_imported_comic",
                     sourceId = source.id,
-                    title = "Offline Archive (CBZ/ZIP)",
+                    title = "Offline Comic Archive",
                     altTitle = "Local Comic Book",
                     author = "Local",
                     description = "Imported CBZ and ZIP comic archives stored locally on device.",
-                    coverUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+                    coverUrl = "https://cdn.myanimelist.net/images/manga/1/259070.jpg",
                     status = "Finished",
                     rating = 10f,
                     genres = listOf("CBZ", "Local", "Offline")
@@ -350,10 +278,70 @@ class LocalStorageSource : MangaSourceParser {
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/3/54525.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/258224.jpg"
         )
         Result.success(sampleUrls.mapIndexed { idx, url -> MangaPage(idx + 1, url) })
+    }
+}
+
+class GenericMangaSourceParser(override val source: MangaSource) : MangaSourceParser {
+
+    override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
+        val items = SourceCatalogDataProvider.getMangaForSource(
+            sourceId = source.id,
+            sourceName = source.name,
+            category = source.category,
+            language = source.language
+        )
+        Result.success(items)
+    }
+
+    override suspend fun getLatestManga(page: Int): Result<List<Manga>> = getPopularManga(page)
+
+    override suspend fun searchManga(query: String, page: Int, genres: List<String>, author: String?): Result<List<Manga>> = withContext(Dispatchers.IO) {
+        val catalog = getPopularManga(page).getOrDefault(emptyList())
+        val filtered = if (query.isBlank()) {
+            catalog
+        } else {
+            catalog.filter { manga ->
+                manga.title.contains(query, ignoreCase = true) ||
+                manga.altTitle.contains(query, ignoreCase = true) ||
+                manga.author.contains(query, ignoreCase = true) ||
+                manga.genres.any { it.contains(query, ignoreCase = true) }
+            }
+        }
+        Result.success(filtered)
+    }
+
+    override suspend fun getMangaDetails(mangaId: String): Result<Manga> = withContext(Dispatchers.IO) {
+        val items = getPopularManga().getOrDefault(emptyList())
+        val found = items.firstOrNull { it.id == mangaId }
+            ?: items.firstOrNull()
+            ?: Manga(
+                id = mangaId,
+                sourceId = source.id,
+                title = mangaId.substringAfterLast("_").replace("_", " ").replaceFirstChar { it.uppercase() },
+                author = source.name,
+                description = "Manga from ${source.name}",
+                coverUrl = "https://cdn.myanimelist.net/images/manga/3/222299.jpg"
+            )
+        Result.success(found)
+    }
+
+    override suspend fun getChapters(mangaId: String, language: String?): Result<List<Chapter>> = withContext(Dispatchers.IO) {
+        val chapters = SourceCatalogDataProvider.getChaptersForManga(
+            mangaId = mangaId,
+            sourceId = source.id,
+            sourceName = source.name,
+            language = language ?: source.language
+        )
+        Result.success(chapters)
+    }
+
+    override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
+        val pages = SourceCatalogDataProvider.getPagesForChapter(chapterId)
+        Result.success(pages)
     }
 }

@@ -79,68 +79,6 @@ object CatalogSourcesData {
     )
 
     fun getAllCatalogSources(): List<RawSourceInfo> {
-        val result = mutableListOf<RawSourceInfo>()
-        result.addAll(baseSourcesList)
-
-        // Generate full 1200+ source extensions set for complete Kotatsu parity
-        val prefixNames = listOf(
-            "AnisaScans", "AquaManga", "Arc-Relight", "Arenascans", "ArvenComics", "AryaScans",
-            "AssortedScans", "AstraScans", "AsuraScans.us", "AsuraScansGg", "Atsu.moe", "BakaScans",
-            "BilibiliComics", "CatManga", "CelestialScans", "CoffeeManga", "CulturedWorks", "DisasterScans",
-            "DragonTea", "DrakeScans", "DutyScans", "EclipseScans", "EmpressScan", "GALAXYMANGA",
-            "GameofScanlation", "GourmetScans", "GrazeScans", "HeroManhua", "HiperToon", "ImmortalUpdates",
-            "ImperimperScans", "IsekaiScan", "JunyaScans", "KaguyaWorks", "KaiserScans", "KlapScans",
-            "KnightNocturnal", "LeviatanScans", "LuminousScans", "MangaChill", "MangaClash", "MangaDistrict",
-            "MangaGreat", "MangaHost", "MangaHub", "MangaIn do", "MangaKatana", "MangaKisa",
-            "MangaLover", "MangaOwls", "MangaPill", "MangaPlus", "MangaRock", "MangaSuki",
-            "MangaSuki.org", "MangaTown", "MangaTxe", "ManhuaFast", "ManhuaGold", "ManhuaPlus",
-            "ManhuaUS", "Manhwa18", "ManhwaClub", "ManhwaFull", "ManhwaList", "ManhwaRaw",
-            "ManhwaTop", "ManhwaWorld", "MethodScans", "MMScans", "MysticalMerries", "NightScans",
-            "NinjaScans", "NekoScans", "NaniScans", "OuraScans", "PandaManga", "PicoManga",
-            "PlatinumScans", "ProjectTime", "PumaScans", "ReadManhua", "ResetScans", "ReaperScans",
-            "ResetScans", "RizzComics", "ScansRaw", "SecretScans", "ShadowScans", "SkyScans",
-            "SorenScans", "SpectraScans", "SSerialScans", "StudioScans", "SublimeScans", "TenseiScans",
-            "TritiniaScans", "Toonily", "Toonily.net", "TritonScans", "UnniScans", "VortexScans",
-            "WandererScans", "WebtoonXYZ", "WickedTrapped", "WuxiaWorld", "XianxiaComics", "YaoiScan",
-            "YugenScans", "ZeroScans", "ZinManga"
-        )
-
-        val languages = listOf("en", "vi", "es", "fr", "ja", "de", "it", "ru", "id", "zh", "pt", "tr")
-        val categories = listOf("Manga", "Manhwa", "Manhua", "Comics", "Hentai", "Webtoons")
-
-        var count = 0
-        for (i in 0..12) {
-            for (prefix in prefixNames) {
-                count++
-                val id = "src_${prefix.lowercase().replace(".", "_")}_$count"
-                val lang = languages[count % languages.size]
-                val cat = categories[count % categories.size]
-                val isNsfw = cat == "Hentai" || prefix.lowercase().contains("18") || prefix.lowercase().contains("yaoi")
-
-                result.add(
-                    RawSourceInfo(
-                        id = id,
-                        name = if (i == 0) prefix else "$prefix $i",
-                        domain = "${prefix.lowercase().replace(" ", "")}.com",
-                        language = lang,
-                        category = cat,
-                        iconEmoji = when (cat) {
-                            "Manhwa" -> "🇰🇷"
-                            "Manhua" -> "🇨🇳"
-                            "Comics" -> "🦇"
-                            "Hentai" -> "🔞"
-                            "Webtoons" -> "📜"
-                            else -> "📖"
-                        },
-                        brandColorHex = 0xFF4F46E5 + (count * 1000L),
-                        reliability = 0.90f + ((count % 10) / 100f),
-                        isNsfw = isNsfw
-                    )
-                )
-                if (result.size >= 1248) break
-            }
-            if (result.size >= 1248) break
-        }
-        return result
+        return baseSourcesList
     }
 }

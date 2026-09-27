@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +37,13 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -132,10 +138,10 @@ fun SettingsScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = KotatsuDarkBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = KotatsuDarkBg,
+        containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier
     ) { innerPadding ->
         Box(
@@ -271,13 +277,17 @@ private fun SettingsCategoryTile(
     subtitle: String,
     onClick: () -> Unit
 ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val outlineColor = MaterialTheme.colorScheme.outline
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = KotatsuDarkSurface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, KotatsuCardBorder)
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        border = androidx.compose.foundation.BorderStroke(1.dp, outlineColor)
     ) {
         Row(
             modifier = Modifier
@@ -288,10 +298,10 @@ private fun SettingsCategoryTile(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(KotatsuTeal.copy(alpha = 0.15f), CircleShape),
+                    .background(primaryColor.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = KotatsuTeal, modifier = Modifier.size(20.dp))
+                Icon(imageVector = icon, contentDescription = null, tint = primaryColor, modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -309,6 +319,11 @@ private fun AppearanceSettingsContent(
     viewModel: MangaViewModel,
     settings: com.example.data.model.AppSettings
 ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val themeList = listOf("Totoro", "Black & White", "Manga Yellow", "Pink", "Silver", "Expressive")
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -317,18 +332,29 @@ private fun AppearanceSettingsContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text("Color scheme", color = KotatsuTeal, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Color scheme & Accent", color = primaryColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (scheme in listOf("Totoro", "Dynamic", "Expressive", "Miku", "Asuka")) {
-                    val isSel = settings.colorScheme == scheme
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                for (scheme in themeList) {
+                    val isSel = settings.colorScheme.equals(scheme, ignoreCase = true)
                     Surface(
                         modifier = Modifier.clickable { viewModel.updateSettings { it.copy(colorScheme = scheme) } },
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isSel) KotatsuTeal.copy(alpha = 0.2f) else KotatsuDarkSurface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) KotatsuTeal else KotatsuCardBorder)
+                        color = if (isSel) primaryColor.copy(alpha = 0.25f) else surfaceColor,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSel) primaryColor else outlineColor)
                     ) {
-                        Text(scheme, color = if (isSel) KotatsuTeal else KotatsuTextSecondary, fontSize = 12.sp, modifier = Modifier.padding(10.dp))
+                        Text(
+                            text = scheme,
+                            color = if (isSel) primaryColor else KotatsuTextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
                     }
                 }
             }
@@ -337,8 +363,8 @@ private fun AppearanceSettingsContent(
         item {
             SettingsCard {
                 SettingsSwitchRow(
-                    title = "AMOLED Black",
-                    subtitle = "Uses less power on AMOLED screens with pure black backgrounds",
+                    title = "Pure AMOLED Black (#000000)",
+                    subtitle = "Uses pure #000000 black background for max battery savings and OLED contrast",
                     checked = settings.isAmoledBlack,
                     onCheckedChange = { viewModel.updateSettings { s -> s.copy(isAmoledBlack = it) } }
                 )
@@ -524,6 +550,11 @@ private fun ServicesSettingsContent(
     viewModel: MangaViewModel,
     settings: com.example.data.model.AppSettings
 ) {
+    val context = LocalContext.current
+    val syncConfig by viewModel.syncConfig.collectAsState()
+    var serverUrl by remember { mutableStateOf(syncConfig.serverUrl) }
+    var authToken by remember { mutableStateOf(syncConfig.authToken) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -532,6 +563,86 @@ private fun ServicesSettingsContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
+            Text("Kotatsu Sync Server", color = KotatsuTeal, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsCard {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Sync library, reading progress, history, and bookmarks across devices via Kotatsu Syncserver.",
+                        color = KotatsuTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = serverUrl,
+                        onValueChange = {
+                            serverUrl = it
+                            viewModel.updateSyncConfig(it, authToken, syncConfig.autoSyncEnabled)
+                        },
+                        label = { Text("Server URL") },
+                        placeholder = { Text("https://sync.kotatsu.app") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = authToken,
+                        onValueChange = {
+                            authToken = it
+                            viewModel.updateSyncConfig(serverUrl, it, syncConfig.autoSyncEnabled)
+                        },
+                        label = { Text("Auth Token / Key") },
+                        placeholder = { Text("Enter bearer token or leave blank for local sync") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Automatic background sync", color = KotatsuTextPrimary, fontSize = 14.sp)
+                            Text("Synchronize progress periodically", color = KotatsuTextSecondary, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = syncConfig.autoSyncEnabled,
+                            onCheckedChange = {
+                                viewModel.updateSyncConfig(serverUrl, authToken, it)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = KotatsuTeal
+                            )
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            viewModel.performSync { result ->
+                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = KotatsuTeal),
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Sync, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (syncConfig.isSyncing) "Synchronizing..." else "Sync Now",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Text("Recommendation Services", color = KotatsuTeal, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(6.dp))
             SettingsCard {
                 SettingsSwitchRow(
                     title = "Suggestions",
@@ -648,8 +759,8 @@ private fun SettingsCard(content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = KotatsuDarkSurface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, KotatsuCardBorder)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             content()
@@ -681,7 +792,7 @@ private fun SettingsSwitchRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = KotatsuTeal,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
                 uncheckedThumbColor = KotatsuTextSecondary,
                 uncheckedTrackColor = KotatsuDarkSurfaceHigh
             )

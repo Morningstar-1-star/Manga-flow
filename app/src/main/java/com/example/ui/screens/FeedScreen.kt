@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.remember
+import com.example.data.sources.SourceCatalogDataProvider
 import coil.compose.AsyncImage
 import com.example.ui.theme.KotatsuCardBorder
 import com.example.ui.theme.KotatsuDarkBg
@@ -64,61 +67,34 @@ fun FeedScreen(
 ) {
     val libraryManga by viewModel.libraryManga.collectAsState()
 
-    val updates = listOf(
-        FeedUpdateItem(
-            mangaId = "comick_brainrot_girlfriend",
-            sourceId = "comick",
-            mangaTitle = "Brainrot Girlfriend",
-            coverUrl = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
-            newChapterName = "Chapter 46: Brainrot Forever",
-            timeAgo = "15 minutes ago"
-        ),
-        FeedUpdateItem(
-            mangaId = "mangadex_non_milk_coffee",
-            sourceId = "mangadex",
-            mangaTitle = "Non Milk-Milk Coffee Webcomic",
-            coverUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80",
-            newChapterName = "Ngày 19: Special Afterword",
-            timeAgo = "2 hours ago"
-        ),
-        FeedUpdateItem(
-            mangaId = "mangadex_self_destruction_girl",
-            sourceId = "mangadex",
-            mangaTitle = "Self-destruction Girl",
-            coverUrl = "https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80",
-            newChapterName = "Chapter 21: A New Crisis",
-            timeAgo = "4 hours ago"
-        ),
-        FeedUpdateItem(
-            mangaId = "comick_useless_genie",
-            sourceId = "comick",
-            mangaTitle = "The Useless Genie and her Intrusive Master",
-            coverUrl = "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=600&auto=format&fit=crop&q=80",
-            newChapterName = "Chapter 16: Summer Beach Wish",
-            timeAgo = "Yesterday"
-        ),
-        FeedUpdateItem(
-            mangaId = "mangadex_rotten_petal",
-            sourceId = "mangadex",
-            mangaTitle = "Rotten Petal",
-            coverUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
-            newChapterName = "Chapter 31: Blood Lily",
-            timeAgo = "2 days ago"
-        ),
-        FeedUpdateItem(
-            mangaId = "mangadex_roommate_pretty",
-            sourceId = "mangadex",
-            mangaTitle = "I Guess My Roommate Is Pretty?",
-            coverUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80",
-            newChapterName = "Chapter 26: Anniversary Dinner",
-            timeAgo = "3 days ago"
-        )
-    )
+    val updates = remember(libraryManga) {
+        val realManga = listOf(
+            SourceCatalogDataProvider.getMangaForSource("asura", "Asura Scans", "Manhwa", "en"),
+            SourceCatalogDataProvider.getMangaForSource("comick", "ComicK", "Manga", "en"),
+            SourceCatalogDataProvider.getMangaForSource("mangadex", "MangaDex", "Manga", "en"),
+            SourceCatalogDataProvider.getMangaForSource("cuutruyen", "Cứu Truyện", "Manga", "vi")
+        ).flatten()
+
+        val timeLabels = listOf("10 minutes ago", "25 minutes ago", "1 hour ago", "3 hours ago", "5 hours ago", "Yesterday", "2 days ago")
+        realManga.take(8).mapIndexed { idx, m ->
+            FeedUpdateItem(
+                mangaId = m.id,
+                sourceId = m.sourceId,
+                mangaTitle = m.title,
+                coverUrl = m.coverUrl,
+                newChapterName = "Chapter ${m.totalChapters}: Latest Update",
+                timeAgo = timeLabels.getOrElse(idx) { "Recently" }
+            )
+        }
+    }
+
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val appBgColor = MaterialTheme.colorScheme.background
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(KotatsuDarkBg)
+            .background(appBgColor)
             .padding(horizontal = 16.dp)
     ) {
         Spacer(modifier = Modifier.height(12.dp))
@@ -132,7 +108,7 @@ fun FeedScreen(
                 Icon(
                     imageVector = Icons.Default.RssFeed,
                     contentDescription = null,
-                    tint = KotatsuTeal,
+                    tint = primaryColor,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))

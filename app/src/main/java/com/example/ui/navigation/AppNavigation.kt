@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.RssFeed
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -144,7 +145,7 @@ fun AppNavigation(
             // Tablet / Landscape with Navigation Rail (Screenshot 1 & 2!)
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
-                    containerColor = KotatsuDarkSurface,
+                    containerColor = MaterialTheme.colorScheme.surface,
                     header = {
                         Box(
                             modifier = Modifier
@@ -217,7 +218,7 @@ fun AppNavigation(
                 bottomBar = {
                     if (isMainTab) {
                         NavigationBar(
-                            containerColor = KotatsuDarkSurface,
+                            containerColor = MaterialTheme.colorScheme.surface,
                             modifier = Modifier
                                 .navigationBarsPadding()
                                 .testTag("bottom_nav_bar")
@@ -274,7 +275,7 @@ fun AppNavigation(
                         }
                     }
                 },
-                containerColor = KotatsuDarkBg
+                containerColor = MaterialTheme.colorScheme.background
             ) { innerPadding ->
                 Box(
                     modifier = Modifier

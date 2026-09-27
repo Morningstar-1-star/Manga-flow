@@ -120,6 +120,45 @@ fun MangaCard(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // Source Badge Overlay (Top Left)
+            if (manga.sourceId.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.75f)
+                ) {
+                    Text(
+                        text = when (val s = manga.sourceId.lowercase()) {
+                            "comick" -> "🦄 ComicK"
+                            "mangadex" -> "🐱 MangaDex"
+                            "asurascans", "asura" -> "🗡️ Asura"
+                            "flamecomics", "flame" -> "🔥 Flame"
+                            "reaperscans", "reaper" -> "💀 Reaper"
+                            "webtoons", "webtoon" -> "🟢 Webtoon"
+                            "tapastic", "tapas" -> "🟡 Tapas"
+                            "manganato" -> "🍃 Nato"
+                            "mangakakalot" -> "🍏 Kakalot"
+                            "mangapark" -> "🅿️ Park"
+                            "mangasee" -> "👁️ See"
+                            "cuutruyen" -> "🐬 Cứu"
+                            "truyengg" -> "🦊 TruyenGG"
+                            "doctruyen3q" -> "🅰️ 3Q"
+                            "batoto" -> "🅱️ Bato"
+                            "tumangaonline" -> "🇲 TMO"
+                            "shonenjumpplus" -> "🎌 Jump+"
+                            "pixivcomic" -> "🎨 Pixiv"
+                            else -> s.replaceFirstChar { it.uppercase() }.take(10)
+                        },
+                        color = KotatsuTeal,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
             // Circular progress or completed check badge on bottom right (as in Screenshot 1!)
             if (isCompleted) {
                 Box(

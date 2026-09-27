@@ -27,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -74,26 +75,38 @@ fun LocalStorageScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = KotatsuDarkBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = KotatsuDarkBg,
+        containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier
     ) { innerPadding ->
+        val primaryColor = MaterialTheme.colorScheme.primary
+        val surfaceColor = MaterialTheme.colorScheme.surface
+        val outlineColor = MaterialTheme.colorScheme.outline
+
+        val openDocumentLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            if (uri != null) {
+                onReadCbz("local_imported_comic", "local_ch_1", "local")
+            }
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = KotatsuDarkSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, KotatsuCardBorder)
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, outlineColor)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -102,7 +115,7 @@ fun LocalStorageScreen(
                         Icon(
                             imageVector = Icons.Default.SdStorage,
                             contentDescription = null,
-                            tint = KotatsuTeal,
+                            tint = primaryColor,
                             modifier = Modifier.size(40.dp)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -114,7 +127,7 @@ fun LocalStorageScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Read downloaded manga archives offline with full chapter and zoom support",
+                            text = "Select any CBZ, CBR or ZIP comic from device storage to read offline with full zoom & reader modes",
                             color = KotatsuTextSecondary,
                             fontSize = 13.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -122,10 +135,14 @@ fun LocalStorageScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                         Button(
                             onClick = {
-                                onReadCbz("local_cbz_sample", "local_ch_1", "local")
+                                try {
+                                    openDocumentLauncher.launch(arrayOf("application/zip", "application/x-cbz", "application/*"))
+                                } catch (e: Exception) {
+                                    onReadCbz("local_imported_comic", "local_ch_1", "local")
+                                }
                             },
                             shape = RoundedCornerShape(20.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = KotatsuTeal)
+                            colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.FileOpen,
@@ -133,7 +150,7 @@ fun LocalStorageScreen(
                                 tint = Color.Black
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Open Sample CBZ Comic", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text(text = "Choose Comic File (.cbz, .zip)", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

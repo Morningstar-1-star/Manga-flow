@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.Manga
+import androidx.compose.material3.MaterialTheme
+import com.example.data.sources.SourceCatalogDataProvider
 import com.example.ui.components.QuickActionTile
 import com.example.ui.components.SourceGridItem
 import com.example.ui.components.TopSearchBar
@@ -76,10 +79,13 @@ fun ExploreScreen(
     val sources by viewModel.sources.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
 
+    val appBgColor = MaterialTheme.colorScheme.background
+    val appSurfaceColor = MaterialTheme.colorScheme.surface
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(KotatsuDarkBg)
+            .background(appBgColor)
             .padding(horizontal = 16.dp)
     ) {
         Spacer(modifier = Modifier.height(8.dp))
@@ -166,17 +172,22 @@ fun ExploreScreen(
                 }
             }
 
-            // Suggestions Featured Card (Screenshot 3: "Machikado Mazoku")
+            // Suggestions Featured Card (Authentic Manga from catalog)
             item(span = { GridItemSpan(4) }) {
+                val featuredManga = remember {
+                    SourceCatalogDataProvider.getMangaForSource("mangadex", "MangaDex", "Manga", "en").firstOrNull()
+                }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            onNavigateToMangaDetails("mangadex_non_milk_coffee", "mangadex")
+                            if (featuredManga != null) {
+                                onNavigateToMangaDetails(featuredManga.id, featuredManga.sourceId)
+                            }
                         }
                         .testTag("featured_suggestion_card"),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = KotatsuDarkSurface),
+                    colors = CardDefaults.cardColors(containerColor = appSurfaceColor),
                     border = androidx.compose.foundation.BorderStroke(1.dp, KotatsuCardBorder)
                 ) {
                     Row(
@@ -186,8 +197,8 @@ fun ExploreScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AsyncImage(
-                            model = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
-                            contentDescription = "Machikado Mazoku",
+                            model = featuredManga?.coverUrl ?: "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
+                            contentDescription = featuredManga?.title ?: "Featured Manga",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .size(56.dp)
@@ -197,7 +208,7 @@ fun ExploreScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Machikado Mazoku",
+                                text = featuredManga?.title ?: "Frieren: Beyond Journey's End",
                                 color = KotatsuTextPrimary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -206,7 +217,7 @@ fun ExploreScreen(
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "Subtext, Slice of Life, Demon, Comedy, Mahou Shoujo, 4-koma, Anime",
+                                text = featuredManga?.genres?.joinToString(", ") ?: "Fantasy, Adventure, Drama",
                                 color = KotatsuTextSecondary,
                                 fontSize = 12.sp,
                                 maxLines = 2,
@@ -270,7 +281,7 @@ fun ExploreScreen(
                 SourceGridItem(
                     source = source,
                     onClick = {
-                        viewModel.onSearchQueryChanged("")
+                        viewModel.selectSourceFeed(source.id)
                         onNavigateToSearch()
                     }
                 )

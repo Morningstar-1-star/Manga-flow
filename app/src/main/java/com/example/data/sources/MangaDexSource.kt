@@ -226,7 +226,7 @@ class MangaDexSource(
         val coverUrl = if (coverFilename.isNotEmpty()) {
             "https://uploads.mangadex.org/covers/$rawId/$coverFilename.512.jpg"
         } else {
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/2/253119.jpg"
         }
 
         val tagsArray = attr.optJSONArray("tags")
@@ -255,77 +255,7 @@ class MangaDexSource(
     }
 
     private fun getFallbackMangaList(): List<Manga> {
-        return listOf(
-            Manga(
-                id = "mangadex_non_milk_coffee",
-                sourceId = "mangadex",
-                title = "Non Milk-Milk Coffee Webcomic",
-                altTitle = "Bạc xỉu không sữa",
-                author = "Senukin",
-                description = "A male office worker falls in love with the owner of a small coffee shop in a corner of the big city.",
-                coverUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80",
-                status = "Finished",
-                rating = 8.9f,
-                genres = listOf("Web Comic", "Self-Published", "Romance", "Slice of Life", "Office Workers", "Comedy"),
-                totalChapters = 18,
-                readProgressPercent = 72
-            ),
-            Manga(
-                id = "mangadex_say_hello_to_black_jack",
-                sourceId = "mangadex",
-                title = "Say Hello to Black Jack",
-                altTitle = "Give My Regards to Black Jack",
-                author = "Shuho Sato",
-                description = "Saitou is a young doctor who just graduated. Starting his career as a doctor he finds there is a lot more to this profession than one would think. An intense drama about the dark side of the medical world.",
-                coverUrl = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&auto=format&fit=crop&q=80",
-                status = "Finished",
-                rating = 9.1f,
-                genres = listOf("Drama", "Medical", "Slice of Life", "Seinen"),
-                totalChapters = 127,
-                readProgressPercent = 52
-            ),
-            Manga(
-                id = "mangadex_self_destruction_girl",
-                sourceId = "mangadex",
-                title = "Self-destruction Girl",
-                altTitle = "Jikai Shoujo",
-                author = "Kuroba",
-                description = "A comedy about a girl whose overthinking leads to the most hilarious self-inflicted dilemmas.",
-                coverUrl = "https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80",
-                status = "Ongoing",
-                rating = 8.6f,
-                genres = listOf("Comedy", "School Life", "Romance"),
-                totalChapters = 20,
-                readProgressPercent = 37
-            ),
-            Manga(
-                id = "mangadex_mid_autumn_without_you",
-                sourceId = "mangadex",
-                title = "Mid-Autumn without You",
-                altTitle = "Trung Thu Không Có Em",
-                author = "Linh Dan",
-                description = "A heartwarming romance story set during the beautiful lantern festival in Hanoi.",
-                coverUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80",
-                status = "Finished",
-                rating = 9.0f,
-                genres = listOf("Romance", "Shoujo", "Drama"),
-                totalChapters = 12,
-                readProgressPercent = 38
-            ),
-            Manga(
-                id = "mangadex_rotten_petal",
-                sourceId = "mangadex",
-                title = "Rotten Petal",
-                altTitle = "Cánh Hoa Tàn",
-                author = "Hana",
-                description = "A dark fantasy mystery where flowers blooming out of season signal a curse.",
-                coverUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
-                status = "Ongoing",
-                rating = 8.8f,
-                genres = listOf("Fantasy", "Mystery", "Supernatural"),
-                totalChapters = 30
-            )
-        )
+        return SourceCatalogDataProvider.getMangaForSource("mangadex", "MangaDex", "Manga", "en")
     }
 
     private fun getFallbackChapters(mangaId: String): List<Chapter> {
@@ -349,12 +279,12 @@ class MangaDexSource(
     private fun getFallbackPages(chapterId: String): List<MangaPage> {
         // High quality webtoon pages for seamless reading
         val sampleUrls = listOf(
-            "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1563089145-599997674d42?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=1200&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=1200&auto=format&fit=crop&q=80"
+            "https://cdn.myanimelist.net/images/manga/3/188896.jpg",
+            "https://cdn.myanimelist.net/images/manga/2/258237.jpg",
+            "https://cdn.myanimelist.net/images/manga/1/259070.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/54525.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
+            "https://cdn.myanimelist.net/images/manga/3/258224.jpg"
         )
         return sampleUrls.mapIndexed { index, url ->
             MangaPage(

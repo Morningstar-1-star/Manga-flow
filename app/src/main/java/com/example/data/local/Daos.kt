@@ -140,4 +140,7 @@ interface SourceConfigDao {
 
     @Query("UPDATE source_configs SET isEnabled = :isEnabled WHERE id = :id")
     suspend fun toggleEnable(id: String, isEnabled: Boolean)
+
+    @Query("DELETE FROM source_configs WHERE id = :id")
+    suspend fun deleteConfig(id: String)
 }

@@ -128,9 +128,34 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     private val _readerColorFilter = MutableStateFlow("None")
     val readerColorFilter: StateFlow<String> = _readerColorFilter.asStateFlow()
 
+    private val _readerBrightness = MutableStateFlow(1.0f)
+    val readerBrightness: StateFlow<Float> = _readerBrightness.asStateFlow()
+
+    private val _translationMode = MutableStateFlow(com.example.data.translation.TranslationMode.ENGLISH_TYPESETTING)
+    val translationMode: StateFlow<com.example.data.translation.TranslationMode> = _translationMode.asStateFlow()
+
+    // Mihon Extensions State
+    val mihonExtensions = com.example.data.sources.MihonExtensionManager.extensionsList
+
+    // Sync Manager
+    val syncManager = com.example.data.sync.SyncManager(database)
+    val syncConfig = syncManager.syncConfig
+
+    private val _diagnosticResults = MutableStateFlow<Map<String, com.example.data.sources.DiagnosticResult>>(emptyMap())
+    val diagnosticResults: StateFlow<Map<String, com.example.data.sources.DiagnosticResult>> = _diagnosticResults.asStateFlow()
+
+    private val _selectedSourceId = MutableStateFlow<String?>(null)
+    val selectedSourceId: StateFlow<String?> = _selectedSourceId.asStateFlow()
+
     init {
-        // Load initial explore search results
-        searchManga("")
+        // Load initial explore search results across sources
+        loadSourceManga(null)
+    }
+
+    fun selectSourceFeed(sourceId: String?) {
+        _selectedSourceId.value = sourceId
+        _searchQuery.value = ""
+        loadSourceManga(sourceId)
     }
 
     fun onSearchQueryChanged(query: String) {
@@ -143,17 +168,50 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
         searchManga(_searchQuery.value)
     }
 
+    fun loadSourceManga(sourceId: String?) {
+        viewModelScope.launch {
+            _isSearching.value = true
+            try {
+                if (sourceId != null) {
+                    val parser = sourceManager.getParser(sourceId)
+                    _searchResults.value = parser.getPopularManga().getOrDefault(emptyList())
+                } else {
+                    val activeList = listOf(
+                        "asurascans", "mangadex", "comick", "webtoons", "flamecomics",
+                        "reaperscans", "manganato", "tapastic", "cuutruyen", "truyengg",
+                        "doctruyen3q", "batoto", "tumangaonline", "shonenjumpplus"
+                    )
+                    val combined = activeList.flatMap { id ->
+                        try {
+                            sourceManager.getParser(id).getPopularManga().getOrDefault(emptyList())
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    }
+                    _searchResults.value = combined.distinctBy { it.id }
+                }
+            } catch (e: Exception) {
+                _searchResults.value = emptyList()
+            } finally {
+                _isSearching.value = false
+            }
+        }
+    }
+
     fun searchManga(query: String) {
         viewModelScope.launch {
             _isSearching.value = true
             try {
                 if (query.isBlank()) {
-                    // Show popular manga from MangaDex & Comick
-                    val dexPopular = sourceManager.getParser("mangadex").getPopularManga().getOrDefault(emptyList())
-                    val comickPopular = sourceManager.getParser("comick").getPopularManga().getOrDefault(emptyList())
-                    _searchResults.value = (dexPopular + comickPopular).distinctBy { it.id }
+                    loadSourceManga(_selectedSourceId.value)
                 } else {
-                    _searchResults.value = sourceManager.searchAcrossSources(query)
+                    val currentSource = _selectedSourceId.value
+                    if (currentSource != null) {
+                        val parser = sourceManager.getParser(currentSource)
+                        _searchResults.value = parser.searchManga(query).getOrDefault(emptyList())
+                    } else {
+                        _searchResults.value = sourceManager.searchAcrossSources(query)
+                    }
                 }
             } catch (e: Exception) {
                 _searchResults.value = emptyList()
@@ -228,6 +286,24 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleEnableSource(sourceId: String, isEnabled: Boolean) {
         viewModelScope.launch {
             sourceManager.toggleEnable(sourceId, isEnabled)
+        }
+    }
+
+    fun addCustomSource(name: String, domain: String, language: String, category: String) {
+        viewModelScope.launch {
+            sourceManager.addCustomSource(name, domain, language, category)
+        }
+    }
+
+    fun deleteSource(sourceId: String) {
+        viewModelScope.launch {
+            sourceManager.deleteSource(sourceId)
+        }
+    }
+
+    fun pingAllSources() {
+        viewModelScope.launch {
+            sourceManager.pingAllSources()
         }
     }
 
@@ -384,5 +460,52 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setReaderColorFilter(filterName: String) {
         _readerColorFilter.value = filterName
+    }
+
+    fun setReaderBrightness(brightness: Float) {
+        _readerBrightness.value = brightness.coerceIn(0.2f, 1.0f)
+    }
+
+    fun setTranslationMode(mode: com.example.data.translation.TranslationMode) {
+        _translationMode.value = mode
+    }
+
+    fun runSourceDiagnostics(sourceId: String) {
+        viewModelScope.launch {
+            val result = com.example.data.sources.SourceHealthManager.runDiagnostics(sourceId) {
+                val parser = sourceManager.getParser(sourceId)
+                val res = parser.getPopularManga(1)
+                if (res.isSuccess) Result.success(res.getOrNull()?.size ?: 0)
+                else Result.failure(res.exceptionOrNull() ?: Exception("Unknown diagnostic failure"))
+            }
+            val currentMap = _diagnosticResults.value.toMutableMap()
+            currentMap[sourceId] = result
+            _diagnosticResults.value = currentMap
+        }
+    }
+
+    fun refreshMihonExtensions() {
+        viewModelScope.launch {
+            com.example.data.sources.MihonExtensionManager.refreshExtensions()
+        }
+    }
+
+    fun toggleInstallMihonExtension(pkgName: String, install: Boolean) {
+        com.example.data.sources.MihonExtensionManager.toggleInstallExtension(pkgName, install)
+    }
+
+    fun toggleEnableMihonExtension(pkgName: String, enable: Boolean) {
+        com.example.data.sources.MihonExtensionManager.toggleEnableExtension(pkgName, enable)
+    }
+
+    fun performSync(onComplete: (com.example.data.sync.SyncResult) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = syncManager.performSync()
+            onComplete(result)
+        }
+    }
+
+    fun updateSyncConfig(url: String, token: String, autoSync: Boolean) {
+        syncManager.updateConfig(url, token, autoSync)
     }
 }

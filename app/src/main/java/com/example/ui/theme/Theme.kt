@@ -3,58 +3,57 @@ package com.example.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-
-private val DarkColorScheme = darkColorScheme(
-    primary = KotatsuTeal,
-    onPrimary = KotatsuOnTeal,
-    primaryContainer = KotatsuTealContainer,
-    onPrimaryContainer = KotatsuTeal,
-    secondary = KotatsuBlue,
-    onSecondary = Color.Black,
-    secondaryContainer = Color(0xFF0C4A6E),
-    onSecondaryContainer = KotatsuBlue,
-    tertiary = KotatsuRose,
-    onTertiary = Color.White,
-    tertiaryContainer = KotatsuRoseContainer,
-    onTertiaryContainer = Color(0xFFFECDD3),
-    background = KotatsuDarkBg,
-    onBackground = KotatsuTextPrimary,
-    surface = KotatsuDarkSurface,
-    onSurface = KotatsuTextPrimary,
-    surfaceVariant = KotatsuDarkSurfaceVariant,
-    onSurfaceVariant = KotatsuTextSecondary,
-    surfaceContainerHighest = KotatsuDarkSurfaceHigh,
-    outline = KotatsuCardBorder,
-    outlineVariant = Color(0xFF1E293B)
-)
-
-private val LightColorScheme = darkColorScheme(
-    // Default to the signature dark theme matching screenshots, since manga reader is primarily dark
-    primary = KotatsuTeal,
-    onPrimary = KotatsuOnTeal,
-    primaryContainer = KotatsuTealContainer,
-    onPrimaryContainer = KotatsuTeal,
-    secondary = KotatsuBlue,
-    onSecondary = Color.Black,
-    background = KotatsuDarkBg,
-    onBackground = KotatsuTextPrimary,
-    surface = KotatsuDarkSurface,
-    onSurface = KotatsuTextPrimary,
-    surfaceVariant = KotatsuDarkSurfaceVariant,
-    onSurfaceVariant = KotatsuTextSecondary,
-    outline = KotatsuCardBorder
-)
+import com.example.data.model.AppSettings
 
 @Composable
 fun KotatsuTheme(
-    darkTheme: Boolean = true, // Default to true as in reference screenshots
+    appSettings: AppSettings = AppSettings(),
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val isAmoled = appSettings.isAmoledBlack || appSettings.colorScheme.equals("AMOLED Black", ignoreCase = true)
+    
+    val bg = if (isAmoled) AmoledBlackBg else KotatsuDarkBg
+    val surface = if (isAmoled) AmoledBlackSurface else KotatsuDarkSurface
+    val surfaceVariant = if (isAmoled) AmoledBlackSurfaceVariant else KotatsuDarkSurfaceVariant
+
+    val (primaryColor, primaryContainerColor) = when (appSettings.colorScheme.lowercase()) {
+        "black & white", "monochrome" -> ThemeMonochromeWhite to ThemeMonochromeContainer
+        "manga yellow", "yellow", "asuka" -> ThemeMangaYellow to ThemeMangaYellowContainer
+        "pink", "kawaii pink", "miku" -> ThemeKawaiiPink to ThemeKawaiiPinkContainer
+        "silver", "silver slate" -> ThemeSilverSlate to ThemeSilverSlateContainer
+        "expressive", "purple" -> ThemeExpressivePurple to ThemeExpressivePurpleContainer
+        else -> KotatsuTeal to KotatsuTealContainer
+    }
+
+    val dynamicColorScheme = darkColorScheme(
+        primary = primaryColor,
+        onPrimary = Color.Black,
+        primaryContainer = primaryContainerColor,
+        onPrimaryContainer = primaryColor,
+        secondary = KotatsuBlue,
+        onSecondary = Color.Black,
+        secondaryContainer = Color(0xFF0C4A6E),
+        onSecondaryContainer = KotatsuBlue,
+        tertiary = KotatsuRose,
+        onTertiary = Color.White,
+        tertiaryContainer = KotatsuRoseContainer,
+        onTertiaryContainer = Color(0xFFFECDD3),
+        background = bg,
+        onBackground = KotatsuTextPrimary,
+        surface = surface,
+        onSurface = KotatsuTextPrimary,
+        surfaceVariant = surfaceVariant,
+        onSurfaceVariant = KotatsuTextSecondary,
+        surfaceContainerHighest = KotatsuDarkSurfaceHigh,
+        outline = if (isAmoled) Color(0xFF1F1F1F) else KotatsuCardBorder,
+        outlineVariant = Color(0xFF1E293B)
+    )
+
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = dynamicColorScheme,
         typography = Typography,
         content = content
     )
@@ -69,4 +68,5 @@ fun MyApplicationTheme(
 ) {
     KotatsuTheme(content = content)
 }
+
 
