@@ -1,0 +1,6 @@
+{
+  "name": "Kotatsu",
+  "description": "Fast and modern manga, manhwa, manhua and webtoon reader with multi-source catalog, offline downloads, and customizable reader modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

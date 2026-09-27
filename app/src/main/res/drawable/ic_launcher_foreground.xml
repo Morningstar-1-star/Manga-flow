@@ -1,0 +1,27 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Left Manga Page -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M30,34 C30,34 38,32 52,35 L52,75 C38,72 30,74 30,74 Z" />
+    <!-- Right Manga Page with Teal Accent -->
+    <path
+        android:fillColor="#2DD4BF"
+        android:pathData="M56,35 C70,32 78,34 78,34 L78,74 C78,74 70,72 56,75 Z" />
+    <!-- Book Spine Glow -->
+    <path
+        android:fillColor="#0D9488"
+        android:pathData="M52,35 L56,35 L56,75 L52,75 Z" />
+    <!-- Comic/Manga speed panels on right page -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M60,42 h14 M60,48 h10 M60,54 h14 M60,60 h8" />
+    <!-- Manga bookmark ribbon hanging down -->
+    <path
+        android:fillColor="#F43F5E"
+        android:pathData="M53,35 L55,35 L55,80 L54,77 L53,80 Z" />
+</vector>
