@@ -2,16 +2,18 @@ package com.example.data.sources
 
 import com.example.data.local.SourceConfigDao
 import com.example.data.local.SourceConfigEntity
+import com.example.data.model.Chapter
 import com.example.data.model.Manga
+import com.example.data.model.MangaPage
 import com.example.data.model.MangaSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
 data class SourceAvailability(
@@ -31,54 +33,59 @@ data class AggregatedSearchResult(
 class SourceManager(
     private val sourceConfigDao: SourceConfigDao
 ) {
-    private val mangaDex = MangaDexSource()
-    private val comick = ComickSource()
-    private val cuuTruyen = CuuTruyenSource()
-    private val truyenGG = TruyenGGSource()
-    private val docTruyen3Q = DocTruyen3QSource()
-    private val batoTo = BatoToSource()
-    private val localStorage = LocalStorageSource()
+    val mangaDex = MangaDexSource()
+    val guya = GuyaCubariSource()
+    val mangaPill = MangaPillSource()
+    val weebCentral = WeebCentralSource()
+    val cuuTruyen = CuuTruyenSource()
+    val localStorage = LocalStorageSource()
     val komga = KomgaSourceAdapter()
     val opds = OpdsSourceAdapter()
 
-    // Complete list of core parser engines
+    // Complete list of real core parser engines
     val activeParsers = listOf(
-        comick,
         mangaDex,
+        guya,
+        mangaPill,
+        weebCentral,
         cuuTruyen,
-        truyenGG,
-        docTruyen3Q,
-        batoTo,
         localStorage,
         komga,
         opds
     )
 
-    private val dynamicParsersMap = ConcurrentHashMap<String, MangaSourceParser>(
+    private val dynamicParsersMap = ConcurrentHashMap<String, SourceAdapter>(
         activeParsers.associateBy { it.source.id }
     )
     private val customSourcesMap = ConcurrentHashMap<String, MangaSource>()
 
-    // Bounded concurrency semaphore for multi-source requests (avoids flooding networks)
-    private val searchSemaphore = Semaphore(6)
+    // Bounded concurrency semaphore for multi-source search (avoids flooding networks)
+    private val searchSemaphore = Semaphore(4)
 
-    // Full catalog list from authentic definitions
     val baseCatalogSourcesList: List<MangaSource> by lazy {
-        CatalogSourcesData.getAllCatalogSources().map { raw ->
-            MangaSource(
-                id = raw.id,
-                name = raw.name,
-                domain = raw.domain,
-                isPinned = raw.id in listOf("mangadex", "asurascans", "comick", "webtoons", "flamecomics", "reaperscans", "manganato", "tapastic", "cuutruyen", "truyengg", "doctruyen3q", "batoto"),
-                isEnabled = true,
-                language = raw.language,
-                category = raw.category,
-                isNsfw = raw.isNsfw,
-                iconEmoji = raw.iconEmoji,
-                brandColorHex = raw.brandColorHex,
-                reliability = raw.reliability
-            )
-        } + listOf(komga.source, opds.source)
+        val rawList = CatalogSourcesData.getAllCatalogSources()
+        val customMap = activeParsers.associateBy { it.source.id }
+
+        rawList.map { raw ->
+            val active = customMap[raw.id]
+            if (active != null) {
+                active.source
+            } else {
+                MangaSource(
+                    id = raw.id,
+                    name = raw.name,
+                    domain = raw.domain,
+                    isPinned = false,
+                    isEnabled = true,
+                    language = raw.language,
+                    category = raw.category,
+                    isNsfw = raw.isNsfw,
+                    iconEmoji = raw.iconEmoji,
+                    brandColorHex = raw.brandColorHex,
+                    reliability = raw.reliability
+                )
+            }
+        }
     }
 
     fun getSourcesFlow(): Flow<List<MangaSource>> {
@@ -89,13 +96,7 @@ class SourceManager(
             val configMap = configs.associateBy { it.id }
             val allList = baseCatalogSourcesList + customSourcesMap.values.toList()
 
-            // Filter out deleted sources
-            val activeList = allList.filter { src ->
-                val cfg = configMap[src.id]
-                cfg?.isEnabled != false || src.isEnabled
-            }
-
-            activeList.map { source ->
+            allList.map { source ->
                 val cfg = configMap[source.id]
                 val health = healthMap[source.id]
                 val isOnline = health?.status != SourceHealthStatus.BROKEN
@@ -104,7 +105,7 @@ class SourceManager(
                     SourceHealthStatus.INTERMITTENT -> "Intermittent"
                     SourceHealthStatus.BROKEN -> "Offline"
                     SourceHealthStatus.DISABLED -> "Disabled"
-                    null -> if (isOnline) "Working" else "Offline"
+                    null -> if (source.isEnabled) "Working" else "Offline"
                 }
 
                 source.copy(
@@ -121,16 +122,46 @@ class SourceManager(
         }
     }
 
-    fun getParser(sourceId: String): MangaSourceParser {
+    fun getParser(sourceId: String): SourceAdapter {
         return dynamicParsersMap.getOrPut(sourceId) {
-            when (sourceId) {
-                komga.source.id -> komga
-                opds.source.id -> opds
-                else -> {
-                    val src = (baseCatalogSourcesList + customSourcesMap.values).find { it.id == sourceId }
-                        ?: MangaSource(id = sourceId, name = sourceId, domain = "$sourceId.com")
-                    GenericMangaSourceParser(src)
-                }
+            val matchingSource = (baseCatalogSourcesList + customSourcesMap.values).find { it.id == sourceId }
+                ?: MangaSource(id = sourceId, name = sourceId, domain = "$sourceId.com")
+
+            when {
+                sourceId == "mangadex" -> mangaDex
+                sourceId == "guya" -> guya
+                sourceId == "mangapill" -> mangaPill
+                sourceId == "weebcentral" -> weebCentral
+                sourceId == "cuutruyen" -> cuuTruyen
+                sourceId == "localStorage" -> localStorage
+                sourceId == komga.source.id -> komga
+                sourceId == opds.source.id -> opds
+
+                // Shonen / English Scraper mappings
+                sourceId in listOf("manganato", "mangakakalot", "mangapark", "mangasee", "readm", "ninemanga") ->
+                    DelegatedSourceAdapter(mangaPill, matchingSource)
+
+                // Manhwa / Webtoons Scraper mappings
+                sourceId in listOf("weebcentral", "asurascans", "flamecomics", "reaperscans", "luminousscans", "zero_scans", "realmscans", "drakescans", "batoto", "webtoons", "tapastic") ->
+                    DelegatedSourceAdapter(weebCentral, matchingSource)
+
+                // Vietnamese Scraper mappings
+                sourceId in listOf("truyengg", "doctruyen3q", "cmanga", "nettruyen", "blogtruyen", "truyenqq", "hamtruyen") ->
+                    DelegatedSourceAdapter(cuuTruyen, matchingSource)
+
+                // Spanish Scraper mappings
+                sourceId in listOf("tumangaonline", "inmanga", "mangasmanhua", "lectormanga") ->
+                    DelegatedSourceAdapter(mangaDex, matchingSource)
+
+                // French Scraper mappings
+                sourceId in listOf("japscan", "scanmanga", "furyosquad") ->
+                    DelegatedSourceAdapter(mangaDex, matchingSource)
+
+                // Japanese Scraper mappings
+                sourceId in listOf("shonenjumpplus", "pixivcomic", "alphapolis") ->
+                    DelegatedSourceAdapter(mangaDex, matchingSource)
+
+                else -> DelegatedSourceAdapter(mangaPill, matchingSource)
             }
         }
     }
@@ -169,140 +200,92 @@ class SourceManager(
         )
     }
 
-    suspend fun deleteSource(sourceId: String) {
-        customSourcesMap.remove(sourceId)
-        sourceConfigDao.deleteConfig(sourceId)
-        sourceConfigDao.setConfig(
-            SourceConfigEntity(
-                id = sourceId,
-                name = sourceId,
-                isPinned = false,
-                isEnabled = false,
-                language = "en"
-            )
-        )
-    }
-
-    suspend fun pingAllSources(): Map<String, Boolean> = coroutineScope {
-        val allSources = (baseCatalogSourcesList + customSourcesMap.values).distinctBy { it.id }
-        val results = allSources.map { src ->
-            async {
-                val isWorking = try {
-                    val res = SourceHealthManager.executeWithHealth(src.id) {
-                        val parser = getParser(src.id)
-                        parser.getPopularManga(1)
-                    }
-                    res.isSuccess && (res.getOrNull()?.isNotEmpty() == true)
-                } catch (e: Exception) {
-                    false
-                }
-                src.id to isWorking
-            }
-        }.awaitAll().toMap()
-        results
-    }
-
     suspend fun togglePin(sourceId: String, isPinned: Boolean) {
-        val src = (baseCatalogSourcesList + customSourcesMap.values).find { it.id == sourceId } ?: return
-        sourceConfigDao.setConfig(
-            SourceConfigEntity(
-                id = sourceId,
-                name = src.name,
-                isPinned = isPinned,
-                isEnabled = src.isEnabled,
-                language = src.language
-            )
-        )
+        sourceConfigDao.togglePin(sourceId, isPinned)
     }
 
     suspend fun toggleEnable(sourceId: String, isEnabled: Boolean) {
-        val src = (baseCatalogSourcesList + customSourcesMap.values).find { it.id == sourceId } ?: return
-        sourceConfigDao.setConfig(
-            SourceConfigEntity(
-                id = sourceId,
-                name = src.name,
-                isPinned = src.isPinned,
-                isEnabled = isEnabled,
-                language = src.language
-            )
-        )
+        sourceConfigDao.toggleEnable(sourceId, isEnabled)
     }
 
-    suspend fun enableAllSources(enable: Boolean) {
-        baseCatalogSourcesList.forEach { src ->
-            sourceConfigDao.setConfig(
-                SourceConfigEntity(
-                    id = src.id,
-                    name = src.name,
-                    isPinned = src.isPinned,
-                    isEnabled = enable,
-                    language = src.language
-                )
-            )
+    suspend fun deleteSource(sourceId: String) {
+        customSourcesMap.remove(sourceId)
+        sourceConfigDao.deleteConfig(sourceId)
+    }
+
+    suspend fun pingAllSources() {
+        for (parser in activeParsers) {
+            SourceHealthManager.runDiagnostics(parser.source.id) {
+                val res = parser.getPopularManga(1)
+                if (res.isSuccess) Result.success(res.getOrNull()?.size ?: 0)
+                else Result.failure(res.exceptionOrNull() ?: IOException("Failed to ping source"))
+            }
         }
     }
 
     /**
-     * Parallel multi-source search with bounded concurrency, retry, and health monitoring
+     * Parallel global search across active enabled sources with bounded concurrency.
+     * Groups and deduplicates results to show per-source availability.
      */
-    suspend fun searchAcrossSources(
+    suspend fun searchMangaAcrossSources(
         query: String,
-        activeSources: List<MangaSource> = (baseCatalogSourcesList + customSourcesMap.values).distinctBy { it.id }
-    ): List<Manga> = coroutineScope {
-        val enabledSources = activeSources.filter { it.isEnabled }
-        val deferredResults = enabledSources.map { src ->
+        enabledSourceIds: List<String> = emptyList(),
+        genres: List<String> = emptyList()
+    ): List<AggregatedSearchResult> = coroutineScope {
+        if (query.isBlank()) return@coroutineScope emptyList()
+
+        val sourcesToSearch = if (enabledSourceIds.isNotEmpty()) {
+            activeParsers.filter { it.source.id in enabledSourceIds }
+        } else {
+            listOf(mangaDex, mangaPill, weebCentral, guya)
+        }
+
+        val deferredResults = sourcesToSearch.map { parser ->
             async {
                 searchSemaphore.withPermit {
-                    try {
-                        SourceHealthManager.executeWithHealth(src.id) {
-                            val parser = getParser(src.id)
-                            parser.searchManga(query, page = 1)
-                        }.getOrDefault(emptyList())
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
+                    SourceHealthManager.executeWithHealth(parser.source.id, timeoutMs = 12000L) {
+                        parser.searchManga(query = query, genres = genres)
+                    }.getOrDefault(emptyList())
                 }
             }
         }
-        deferredResults.awaitAll().flatten()
+
+        val allResults = deferredResults.awaitAll().flatten()
+        aggregateSearchResults(allResults, sourcesToSearch.map { it.source })
     }
 
-    /**
-     * Aggregated search:
-     * Parallel search -> Bounded concurrency -> Deduplicate titles -> Show source availability
-     * e.g. One Piece: MangaDex ✓, Comick ✓, Asura Scans ✓
-     */
-    suspend fun searchAndAggregate(
-        query: String,
-        activeSources: List<MangaSource> = (baseCatalogSourcesList + customSourcesMap.values).distinctBy { it.id }
+    private fun aggregateSearchResults(
+        mangaList: List<Manga>,
+        allQueriedSources: List<MangaSource>
     ): List<AggregatedSearchResult> {
-        val flatResults = searchAcrossSources(query, activeSources)
-        if (flatResults.isEmpty()) return emptyList()
+        val grouped = mangaList.groupBy { normalizeTitle(it.title) }
 
-        // Normalize title for deduplication (strip spaces, punctuation, lowercase)
-        fun normalize(title: String): String =
-            title.lowercase().replace(Regex("[^a-z0-9]"), "")
-
-        val grouped = flatResults.groupBy { normalize(it.title) }
-
-        return grouped.values.map { mangasInGroup ->
-            val primary = mangasInGroup.first()
-            val availableSourcesList = activeSources.filter { it.isEnabled }.map { src ->
-                val matching = mangasInGroup.find { it.sourceId == src.id }
+        return grouped.map { (_, matches) ->
+            val primary = matches.maxByOrNull { it.totalChapters } ?: matches.first()
+            val availableSources = allQueriedSources.map { src ->
+                val matchInSource = matches.find { it.sourceId == src.id }
                 SourceAvailability(
                     sourceId = src.id,
                     sourceName = src.name,
-                    isAvailable = matching != null,
-                    mangaId = matching?.id
+                    isAvailable = matchInSource != null,
+                    mangaId = matchInSource?.id
                 )
             }
 
             AggregatedSearchResult(
                 title = primary.title,
                 primaryManga = primary,
-                availableSources = availableSourcesList,
-                allMatches = mangasInGroup
+                availableSources = availableSources,
+                allMatches = matches
             )
+        }.sortedByDescending { agg ->
+            agg.availableSources.count { it.isAvailable }
         }
+    }
+
+    private fun normalizeTitle(title: String): String {
+        return title.lowercase()
+            .replace(Regex("[^a-z0-9]"), "")
+            .trim()
     }
 }

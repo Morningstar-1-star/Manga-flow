@@ -11,30 +11,36 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import org.jsoup.Jsoup
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /**
  * Komga Source Adapter
- * Connects to personal self-hosted Komga servers (REST API: /api/v1/series, /api/v1/books, /pages)
+ * Connects to a self-hosted Komga manga/comic server via its official REST API.
  */
 class KomgaSourceAdapter(
-    var serverUrl: String = "https://demo.komga.org",
+    var serverUrl: String = "",
     var username: String = "",
     var password: String = ""
 ) : SourceAdapter {
 
-    private val httpClient = OkHttpClient()
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
 
     override val sourceType: SourceType = SourceType.KOMGA
 
     override val source: MangaSource = MangaSource(
         id = "komga_server",
         name = "Komga Server",
-        domain = serverUrl.removePrefix("https://").removePrefix("http://"),
+        domain = "komga.local",
         language = "all",
-        category = "Self-Hosted",
+        category = "Komga",
         iconEmoji = "📚",
-        brandColorHex = 0xFF3B82F6,
-        reliability = 0.99f,
+        brandColorHex = 0xFF6366F1,
+        reliability = 1.0f,
         isCustom = true
     )
 
@@ -45,44 +51,48 @@ class KomgaSourceAdapter(
     }
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        try {
-            val url = "$serverUrl/api/v1/series?page=${page - 1}&size=20&sort=lastModifiedDate,desc"
-            val reqBuilder = Request.Builder().url(url)
-            getAuthHeader()?.let { reqBuilder.header("Authorization", it) }
+        if (serverUrl.isBlank()) {
+            return@withContext Result.failure(IOException("Komga server URL is not configured. Configure it in Settings."))
+        }
 
-            val resp = httpClient.newCall(reqBuilder.build()).execute()
-            if (!resp.isSuccessful) {
-                // Fallback to sample items for demonstration
-                return@withContext Result.success(getKomgaSampleSeries())
-            }
+        runCatching {
+            val pageIndex = (page - 1).coerceAtLeast(0)
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/api/v1/series?page=$pageIndex&size=20&sort=metadata.titleSort,asc")
 
-            val body = resp.body?.string() ?: ""
+            getAuthHeader()?.let { requestBuilder.header("Authorization", it) }
+            val response = httpClient.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) throw IOException("Komga API error: HTTP ${response.code}")
+
+            val body = response.body?.string() ?: throw IOException("Empty response from Komga")
             val json = JSONObject(body)
-            val content = json.optJSONArray("content") ?: JSONArray()
+            val content = json.getJSONArray("content")
             val list = mutableListOf<Manga>()
 
             for (i in 0 until content.length()) {
                 val item = content.getJSONObject(i)
-                val id = item.optString("id")
-                val name = item.optString("name")
+                val id = item.getString("id")
+                val metadata = item.optJSONObject("metadata")
+                val title = metadata?.optString("title", item.optString("name", "Komga Series")) ?: "Series"
+                val summary = metadata?.optString("summary", "") ?: ""
+                val status = metadata?.optString("status", "ONGOING") ?: "ONGOING"
                 val booksCount = item.optInt("booksCount", 0)
 
                 list.add(
                     Manga(
                         id = "komga_$id",
                         sourceId = source.id,
-                        title = name,
+                        title = title,
+                        author = metadata?.optJSONArray("authors")?.optJSONObject(0)?.optString("name", "Unknown") ?: "Unknown",
+                        description = summary,
                         coverUrl = "$serverUrl/api/v1/series/$id/thumbnail",
-                        status = "Completed",
+                        status = status.lowercase().replaceFirstChar { it.uppercase() },
                         totalChapters = booksCount,
-                        description = "Komga Series with $booksCount books"
+                        genres = listOf("Komga", "Self-Hosted")
                     )
                 )
             }
-
-            Result.success(if (list.isNotEmpty()) list else getKomgaSampleSeries())
-        } catch (e: Exception) {
-            Result.success(getKomgaSampleSeries())
+            list
         }
     }
 
@@ -94,106 +104,128 @@ class KomgaSourceAdapter(
         genres: List<String>,
         author: String?
     ): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        val popular = getPopularManga(1).getOrDefault(emptyList())
-        val filtered = popular.filter { it.title.contains(query, ignoreCase = true) }
-        Result.success(filtered)
-    }
+        if (serverUrl.isBlank()) {
+            return@withContext Result.failure(IOException("Komga server URL not configured."))
+        }
+        runCatching {
+            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/api/v1/series?search=$encoded&page=0&size=20")
+            getAuthHeader()?.let { requestBuilder.header("Authorization", it) }
+            val response = httpClient.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) throw IOException("Komga search failed: HTTP ${response.code}")
+            val body = response.body?.string() ?: throw IOException("Empty body")
+            val content = JSONObject(body).getJSONArray("content")
+            val list = mutableListOf<Manga>()
+            for (i in 0 until content.length()) {
+                val item = content.getJSONObject(i)
+                val id = item.getString("id")
+                val metadata = item.optJSONObject("metadata")
+                val title = metadata?.optString("title", item.optString("name", "Komga Series")) ?: "Series"
 
-    override suspend fun getMangaDetails(mangaId: String): Result<Manga> = withContext(Dispatchers.IO) {
-        val popular = getPopularManga(1).getOrDefault(emptyList())
-        val found = popular.find { it.id == mangaId }
-            ?: Manga(
-                id = mangaId,
-                sourceId = source.id,
-                title = "Komga Series",
-                coverUrl = "$serverUrl/api/v1/series/${mangaId.removePrefix("komga_")}/thumbnail",
-                description = "Self-hosted Komga series"
-            )
-        Result.success(found)
-    }
-
-    override suspend fun getChapters(mangaId: String, language: String?): Result<List<Chapter>> = withContext(Dispatchers.IO) {
-        val seriesId = mangaId.removePrefix("komga_")
-        val url = "$serverUrl/api/v1/series/$seriesId/books"
-        val reqBuilder = Request.Builder().url(url)
-        getAuthHeader()?.let { reqBuilder.header("Authorization", it) }
-
-        val chapters = mutableListOf<Chapter>()
-        try {
-            val resp = httpClient.newCall(reqBuilder.build()).execute()
-            if (resp.isSuccessful) {
-                val body = resp.body?.string() ?: ""
-                val json = JSONObject(body)
-                val content = json.optJSONArray("content") ?: JSONArray()
-                for (i in 0 until content.length()) {
-                    val b = content.getJSONObject(i)
-                    val bookId = b.optString("id")
-                    val bookName = b.optString("name", "Book ${i + 1}")
-                    val pageCount = b.optInt("media.pagesCount", 24)
-                    chapters.add(
-                        Chapter(
-                            id = "komga_book_$bookId",
-                            mangaId = mangaId,
-                            sourceId = source.id,
-                            name = bookName,
-                            number = (i + 1).toFloat(),
-                            pageCount = pageCount
-                        )
-                    )
-                }
-            }
-        } catch (_: Exception) {}
-
-        if (chapters.isEmpty()) {
-            for (i in 1..5) {
-                chapters.add(
-                    Chapter(
-                        id = "${mangaId}_vol$i",
-                        mangaId = mangaId,
+                list.add(
+                    Manga(
+                        id = "komga_$id",
                         sourceId = source.id,
-                        name = "Volume $i",
-                        number = i.toFloat(),
-                        pageCount = 30
+                        title = title,
+                        coverUrl = "$serverUrl/api/v1/series/$id/thumbnail",
+                        genres = listOf("Komga")
                     )
                 )
             }
+            list
         }
+    }
 
-        Result.success(chapters)
+    override suspend fun getMangaDetails(mangaId: String): Result<Manga> = withContext(Dispatchers.IO) {
+        if (serverUrl.isBlank()) return@withContext Result.failure(IOException("Komga server URL not configured."))
+        runCatching {
+            val seriesId = mangaId.removePrefix("komga_")
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/api/v1/series/$seriesId")
+            getAuthHeader()?.let { requestBuilder.header("Authorization", it) }
+            val response = httpClient.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) throw IOException("Komga details failed: HTTP ${response.code}")
+            val body = response.body?.string() ?: throw IOException("Empty body")
+            val item = JSONObject(body)
+            val metadata = item.optJSONObject("metadata")
+            val title = metadata?.optString("title", item.optString("name", "Komga Series")) ?: "Series"
+            val summary = metadata?.optString("summary", "") ?: ""
+
+            Manga(
+                id = mangaId,
+                sourceId = source.id,
+                title = title,
+                description = summary,
+                coverUrl = "$serverUrl/api/v1/series/$seriesId/thumbnail",
+                genres = listOf("Komga")
+            )
+        }
+    }
+
+    override suspend fun getChapters(mangaId: String, language: String?): Result<List<Chapter>> = withContext(Dispatchers.IO) {
+        if (serverUrl.isBlank()) return@withContext Result.failure(IOException("Komga server URL not configured."))
+        runCatching {
+            val seriesId = mangaId.removePrefix("komga_")
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/api/v1/series/$seriesId/books?size=500&sort=metadata.numberSort,asc")
+            getAuthHeader()?.let { requestBuilder.header("Authorization", it) }
+            val response = httpClient.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) throw IOException("Komga books failed: HTTP ${response.code}")
+            val body = response.body?.string() ?: throw IOException("Empty body")
+            val content = JSONObject(body).getJSONArray("content")
+            val chapters = mutableListOf<Chapter>()
+
+            for (i in 0 until content.length()) {
+                val book = content.getJSONObject(i)
+                val bookId = book.getString("id")
+                val name = book.optString("name", "Book ${i + 1}")
+                val number = book.optJSONObject("metadata")?.optDouble("numberSort", (i + 1).toDouble())?.toFloat() ?: (i + 1).toFloat()
+                val pageCount = book.optInt("media_pagesCount", book.optInt("mediaPagesCount", 0))
+
+                chapters.add(
+                    Chapter(
+                        id = bookId,
+                        mangaId = mangaId,
+                        sourceId = source.id,
+                        name = name,
+                        number = number,
+                        pageCount = pageCount,
+                        scanlator = "Komga"
+                    )
+                )
+            }
+            chapters
+        }
     }
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
-        val bookId = chapterId.removePrefix("komga_book_")
-        val pages = (1..20).map { idx ->
-            MangaPage(
-                index = idx - 1,
-                imageUrl = "$serverUrl/api/v1/books/$bookId/pages/$idx"
-            )
-        }
-        Result.success(pages)
-    }
+        if (serverUrl.isBlank()) return@withContext Result.failure(IOException("Komga server URL not configured."))
+        runCatching {
+            val requestBuilder = Request.Builder()
+                .url("$serverUrl/api/v1/books/$chapterId/pages")
+            getAuthHeader()?.let { requestBuilder.header("Authorization", it) }
+            val response = httpClient.newCall(requestBuilder.build()).execute()
+            if (!response.isSuccessful) throw IOException("Komga pages failed: HTTP ${response.code}")
+            val body = response.body?.string() ?: throw IOException("Empty body")
+            val pagesArray = JSONArray(body)
+            val pages = mutableListOf<MangaPage>()
 
-    private fun getKomgaSampleSeries(): List<Manga> {
-        return listOf(
-            Manga(
-                id = "komga_demo_1",
-                sourceId = source.id,
-                title = "Berserk (Archived Edition)",
-                author = "Kentaro Miura",
-                coverUrl = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500".replace("unsplash.com", "example.com"),
-                description = "Self-hosted high-resolution Komga digital collection.",
-                totalChapters = 41
-            ),
-            Manga(
-                id = "komga_demo_2",
-                sourceId = source.id,
-                title = "Monster (Deluxe Edition)",
-                author = "Naoki Urasawa",
-                coverUrl = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500".replace("unsplash.com", "example.com"),
-                description = "Komga scanned archive.",
-                totalChapters = 18
-            )
-        )
+            val authMap = getAuthHeader()?.let { mapOf("Authorization" to it) } ?: emptyMap()
+
+            for (i in 0 until pagesArray.length()) {
+                val pageObj = pagesArray.getJSONObject(i)
+                val pageNumber = pageObj.optInt("number", i + 1)
+                pages.add(
+                    MangaPage(
+                        index = pageNumber,
+                        imageUrl = "$serverUrl/api/v1/books/$chapterId/pages/$pageNumber",
+                        headers = authMap
+                    )
+                )
+            }
+            pages
+        }
     }
 }
 
@@ -202,16 +234,21 @@ class KomgaSourceAdapter(
  * Open Publication Distribution System (OPDS) catalog reader for Calibre, Kavita, etc.
  */
 class OpdsSourceAdapter(
-    var catalogUrl: String = "https://manga.example.org/opds",
+    var catalogUrl: String = "",
     var catalogName: String = "OPDS Catalog"
 ) : SourceAdapter {
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
 
     override val sourceType: SourceType = SourceType.OPDS
 
     override val source: MangaSource = MangaSource(
         id = "opds_catalog",
         name = catalogName,
-        domain = catalogUrl.removePrefix("https://").removePrefix("http://"),
+        domain = if (catalogUrl.isNotBlank()) catalogUrl.removePrefix("https://").removePrefix("http://") else "opds.local",
         language = "all",
         category = "OPDS",
         iconEmoji = "🌐",
@@ -221,17 +258,39 @@ class OpdsSourceAdapter(
     )
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
-        Result.success(
-            listOf(
-                Manga(
-                    id = "opds_item_1",
-                    sourceId = source.id,
-                    title = "OPDS Manga Archive",
-                    author = "OPDS Catalog",
-                    description = "Manga feed from Open Publication Distribution System (OPDS) standard."
+        if (catalogUrl.isBlank()) {
+            return@withContext Result.failure(IOException("OPDS feed URL is not configured. Configure it in Settings."))
+        }
+        runCatching {
+            val request = Request.Builder().url(catalogUrl).build()
+            val response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful) throw IOException("OPDS error: HTTP ${response.code}")
+            val xml = response.body?.string() ?: throw IOException("Empty OPDS body")
+            val doc = Jsoup.parse(xml, "", org.jsoup.parser.Parser.xmlParser())
+            val entries = doc.select("entry")
+            val list = mutableListOf<Manga>()
+
+            for (entry in entries) {
+                val id = entry.selectFirst("id")?.text() ?: entry.selectFirst("title")?.text() ?: "entry"
+                val title = entry.selectFirst("title")?.text() ?: "Untitled"
+                val author = entry.selectFirst("author name")?.text() ?: "Unknown"
+                val summary = entry.selectFirst("summary, content")?.text() ?: ""
+                val coverLink = entry.selectFirst("link[rel*='thumbnail'], link[rel*='image']")?.attr("href") ?: ""
+
+                list.add(
+                    Manga(
+                        id = "opds_${id.hashCode()}",
+                        sourceId = source.id,
+                        title = title,
+                        author = author,
+                        description = summary,
+                        coverUrl = coverLink,
+                        genres = listOf("OPDS")
+                    )
                 )
-            )
-        )
+            }
+            list
+        }
     }
 
     override suspend fun getLatestManga(page: Int): Result<List<Manga>> = getPopularManga(page)
@@ -241,15 +300,16 @@ class OpdsSourceAdapter(
         page: Int,
         genres: List<String>,
         author: String?
-    ): Result<List<Manga>> = getPopularManga(1)
+    ): Result<List<Manga>> = getPopularManga(page)
 
     override suspend fun getMangaDetails(mangaId: String): Result<Manga> = withContext(Dispatchers.IO) {
         Result.success(
             Manga(
                 id = mangaId,
                 sourceId = source.id,
-                title = "OPDS Manga Book",
-                description = "OPDS catalog publication entry."
+                title = "OPDS Publication",
+                description = "OPDS catalog publication entry.",
+                genres = listOf("OPDS")
             )
         )
     }
@@ -258,21 +318,18 @@ class OpdsSourceAdapter(
         Result.success(
             listOf(
                 Chapter(
-                    id = "${mangaId}_entry1",
+                    id = "${mangaId}_ch1",
                     mangaId = mangaId,
                     sourceId = source.id,
-                    name = "Book 1",
-                    number = 1f
+                    name = "Complete Volume",
+                    number = 1f,
+                    scanlator = "OPDS"
                 )
             )
         )
     }
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
-        Result.success(
-            (1..10).map {
-                MangaPage(index = it - 1, imageUrl = "$catalogUrl/content/$chapterId/page_$it.jpg")
-            }
-        )
+        Result.failure(IOException("Reading OPDS entry pages requires direct acquisition link downloading."))
     }
 }

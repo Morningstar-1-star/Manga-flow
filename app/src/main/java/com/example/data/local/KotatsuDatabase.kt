@@ -4,8 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.data.model.DownloadStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -17,9 +17,12 @@ import kotlinx.coroutines.launch
         HistoryEntity::class,
         BookmarkEntity::class,
         DownloadEntity::class,
-        SourceConfigEntity::class
+        SourceConfigEntity::class,
+        PageEntity::class,
+        TranslationCacheEntity::class,
+        ReadingProgressEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class KotatsuDatabase : RoomDatabase() {
@@ -29,10 +32,56 @@ abstract class KotatsuDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun downloadDao(): DownloadDao
     abstract fun sourceConfigDao(): SourceConfigDao
+    abstract fun pageDao(): PageDao
+    abstract fun translationCacheDao(): TranslationCacheDao
+    abstract fun readingProgressDao(): ReadingProgressDao
 
     companion object {
         @Volatile
         private var INSTANCE: KotatsuDatabase? = null
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `pages` (
+                        `chapterId` TEXT NOT NULL,
+                        `pageIndex` INTEGER NOT NULL,
+                        `imageUrl` TEXT NOT NULL,
+                        `headersJson` TEXT NOT NULL DEFAULT '',
+                        `localFilePath` TEXT,
+                        PRIMARY KEY(`chapterId`, `pageIndex`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `translation_cache` (
+                        `cacheKey` TEXT NOT NULL PRIMARY KEY,
+                        `pageIndex` INTEGER NOT NULL,
+                        `sourceLanguage` TEXT NOT NULL,
+                        `targetLanguage` TEXT NOT NULL,
+                        `bubblesJson` TEXT NOT NULL,
+                        `fullSummary` TEXT NOT NULL,
+                        `timestamp` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `reading_progress` (
+                        `id` TEXT NOT NULL PRIMARY KEY,
+                        `mangaId` TEXT NOT NULL,
+                        `chapterId` TEXT NOT NULL,
+                        `lastPageRead` INTEGER NOT NULL,
+                        `totalPages` INTEGER NOT NULL,
+                        `progressPercent` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
 
         fun getInstance(context: Context): KotatsuDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -41,11 +90,12 @@ abstract class KotatsuDatabase : RoomDatabase() {
                     KotatsuDatabase::class.java,
                     "kotatsu_manga.db"
                 )
+                    .addMigrations(MIGRATION_1_2)
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
                             CoroutineScope(Dispatchers.IO).launch {
-                                populateInitialData(getInstance(context))
+                                populateInitialSources(getInstance(context))
                             }
                         }
                     })
@@ -55,110 +105,14 @@ abstract class KotatsuDatabase : RoomDatabase() {
             }
         }
 
-        private suspend fun populateInitialData(database: KotatsuDatabase) {
-            // Seed initial Manga entities for explore catalog discovery
-            val initialManga = listOf(
-                MangaEntity(
-                    id = "mangadex_non_milk_coffee",
-                    sourceId = "mangadex",
-                    title = "Non Milk-Milk Coffee Webcomic",
-                    altTitle = "Bạc xỉu không sữa",
-                    author = "Senukin",
-                    artist = "Senukin",
-                    description = "A male office worker falls in love with the owner of a small coffee shop in a corner of the big city.",
-                    coverUrl = "https://cdn.myanimelist.net/images/manga/1/259070.jpg",
-                    status = "Finished",
-                    rating = 8.9f,
-                    genresString = "Web Comic,Self-Published,Romance,Slice of Life,Office Workers,Comedy",
-                    category = "None",
-                    inLibrary = false,
-                    lastReadChapterId = null,
-                    lastReadChapterName = null,
-                    lastReadPage = 0,
-                    lastReadTime = 0L,
-                    totalChapters = 18,
-                    readProgressPercent = 0,
-                    preferredReadMode = "WEBTOON"
-                ),
-                MangaEntity(
-                    id = "mangadex_say_hello_to_black_jack",
-                    sourceId = "mangadex",
-                    title = "Say Hello to Black Jack",
-                    altTitle = "Give My Regards to Black Jack",
-                    author = "Shuho Sato",
-                    artist = "Shuho Sato",
-                    description = "Saitou is a young doctor who just graduated. Starting his career as a doctor he finds there is a lot more to this profession than one would think. An intense drama about the dark side of the medical world.",
-                    coverUrl = "https://cdn.myanimelist.net/images/manga/3/54525.jpg",
-                    status = "Finished",
-                    rating = 9.1f,
-                    genresString = "Drama,Medical,Slice of Life,Seinen",
-                    category = "None",
-                    inLibrary = false,
-                    lastReadChapterId = null,
-                    lastReadChapterName = null,
-                    lastReadPage = 0,
-                    lastReadTime = 0L,
-                    totalChapters = 127,
-                    readProgressPercent = 0,
-                    preferredReadMode = "RTL"
-                ),
-                MangaEntity(
-                    id = "comick_brainrot_girlfriend",
-                    sourceId = "comick",
-                    title = "Brainrot Girlfriend",
-                    altTitle = "My Gyaru Brainrot",
-                    author = "Twison",
-                    artist = "Twison",
-                    description = "When a wholesome guy starts dating an internet-addicted meme gyaru girlfriend, chaos and cute romance ensue.",
-                    coverUrl = "https://cdn.myanimelist.net/images/manga/2/253119.jpg",
-                    status = "Ongoing",
-                    rating = 9.4f,
-                    genresString = "Romance,Comedy,Gyaru,Webtoon",
-                    category = "None",
-                    inLibrary = false,
-                    lastReadChapterId = null,
-                    lastReadChapterName = null,
-                    lastReadPage = 0,
-                    lastReadTime = 0L,
-                    totalChapters = 45,
-                    readProgressPercent = 0,
-                    preferredReadMode = "WEBTOON"
-                ),
-                MangaEntity(
-                    id = "mangadex_self_destruction_girl",
-                    sourceId = "mangadex",
-                    title = "Self-destruction Girl",
-                    altTitle = "Jikai Shoujo",
-                    author = "Kuroba",
-                    artist = "Kuroba",
-                    description = "A comedy about a girl whose overthinking leads to the most hilarious self-inflicted dilemmas.",
-                    coverUrl = "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
-                    status = "Ongoing",
-                    rating = 8.6f,
-                    genresString = "Comedy,School Life,Romance",
-                    category = "None",
-                    inLibrary = false,
-                    lastReadChapterId = null,
-                    lastReadChapterName = null,
-                    lastReadPage = 0,
-                    lastReadTime = 0L,
-                    totalChapters = 20,
-                    readProgressPercent = 0,
-                    preferredReadMode = "STANDARD"
-                )
-            )
-
-            database.mangaDao().insertAll(initialManga)
-
-            // Seed Source Configs
+        private suspend fun populateInitialSources(database: KotatsuDatabase) {
+            // Seed genuine active sources
             val sources = listOf(
-                SourceConfigEntity("comick", "ComicK", isPinned = true, isEnabled = true, language = "en"),
                 SourceConfigEntity("mangadex", "MangaDex", isPinned = true, isEnabled = true, language = "en"),
-                SourceConfigEntity("cuutruyen", "Cứu Truyện", isPinned = true, isEnabled = true, language = "vi"),
-                SourceConfigEntity("truyengg", "TruyenGG", isPinned = true, isEnabled = true, language = "vi"),
-                SourceConfigEntity("doctruyen3q", "DocTruyen3Q", isPinned = true, isEnabled = true, language = "vi"),
-                SourceConfigEntity("cmanga", "CManga", isPinned = true, isEnabled = true, language = "vi"),
-                SourceConfigEntity("batoto", "Bato.To", isPinned = false, isEnabled = true, language = "en")
+                SourceConfigEntity("comick", "ComicK", isPinned = true, isEnabled = true, language = "en"),
+                SourceConfigEntity("guya", "Guya.moe", isPinned = true, isEnabled = true, language = "en"),
+                SourceConfigEntity("manganato", "MangaNato", isPinned = true, isEnabled = true, language = "en"),
+                SourceConfigEntity("cuutruyen", "Cứu Truyện", isPinned = true, isEnabled = true, language = "vi")
             )
             sources.forEach { database.sourceConfigDao().setConfig(it) }
         }

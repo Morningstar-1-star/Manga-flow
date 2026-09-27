@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class MangaDexSource(
@@ -16,7 +17,9 @@ class MangaDexSource(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
-) : MangaSourceParser {
+) : SourceAdapter {
+
+    override val sourceType: SourceType = SourceType.API_SOURCE
 
     override val source = MangaSource(
         id = "mangadex",
@@ -35,27 +38,35 @@ class MangaDexSource(
 
     override suspend fun getPopularManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
         runCatching {
-            val offset = (page - 1) * 20
-            val url = "$baseUrl/manga?limit=20&offset=$offset&includes[]=cover_art&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive"
-            val request = Request.Builder().url(url).build()
+            val offset = (page - 1) * 25
+            val url = "$baseUrl/manga?limit=25&offset=$offset&includes[]=cover_art&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)")
+                .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty body")
+            if (!response.isSuccessful) {
+                throw IOException("MangaDex API error: HTTP ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IOException("Empty response from MangaDex")
             parseMangaList(body)
-        }.recoverCatching {
-            getFallbackMangaList()
         }
     }
 
     override suspend fun getLatestManga(page: Int): Result<List<Manga>> = withContext(Dispatchers.IO) {
         runCatching {
-            val offset = (page - 1) * 20
-            val url = "$baseUrl/manga?limit=20&offset=$offset&includes[]=cover_art&includes[]=author&order[latestUploadedChapter]=desc&contentRating[]=safe&contentRating[]=suggestive"
-            val request = Request.Builder().url(url).build()
+            val offset = (page - 1) * 25
+            val url = "$baseUrl/manga?limit=25&offset=$offset&includes[]=cover_art&includes[]=author&order[latestUploadedChapter]=desc&contentRating[]=safe&contentRating[]=suggestive"
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)")
+                .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty body")
+            if (!response.isSuccessful) {
+                throw IOException("MangaDex API error: HTTP ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IOException("Empty response from MangaDex")
             parseMangaList(body)
-        }.recoverCatching {
-            getFallbackMangaList()
         }
     }
 
@@ -66,17 +77,23 @@ class MangaDexSource(
         author: String?
     ): Result<List<Manga>> = withContext(Dispatchers.IO) {
         runCatching {
-            val offset = (page - 1) * 20
-            val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
-            val url = "$baseUrl/manga?title=$encodedQuery&limit=20&offset=$offset&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive"
-            val request = Request.Builder().url(url).build()
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty body")
-            parseMangaList(body)
-        }.recoverCatching {
-            getFallbackMangaList().filter {
-                it.title.contains(query, ignoreCase = true) || it.altTitle.contains(query, ignoreCase = true)
+            val offset = (page - 1) * 25
+            val encodedQuery = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+            val url = if (encodedQuery.isBlank()) {
+                "$baseUrl/manga?limit=25&offset=$offset&includes[]=cover_art&includes[]=author&order[followedCount]=desc&contentRating[]=safe&contentRating[]=suggestive"
+            } else {
+                "$baseUrl/manga?title=$encodedQuery&limit=25&offset=$offset&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive"
             }
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)")
+                .build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                throw IOException("MangaDex search error: HTTP ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IOException("Empty response from MangaDex")
+            parseMangaList(body)
         }
     }
 
@@ -84,27 +101,40 @@ class MangaDexSource(
         runCatching {
             val cleanId = mangaId.removePrefix("mangadex_")
             val url = "$baseUrl/manga/$cleanId?includes[]=cover_art&includes[]=author&includes[]=artist"
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)")
+                .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty body")
+            if (!response.isSuccessful) {
+                throw IOException("MangaDex detail error: HTTP ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IOException("Empty response from MangaDex")
             val json = JSONObject(body).getJSONObject("data")
             parseMangaJson(json)
-        }.recoverCatching {
-            getFallbackMangaList().find { it.id == mangaId }
-                ?: getFallbackMangaList().first()
         }
     }
 
     override suspend fun getChapters(mangaId: String, language: String?): Result<List<Chapter>> = withContext(Dispatchers.IO) {
         runCatching {
             val cleanId = mangaId.removePrefix("mangadex_")
-            val langParam = if (language != null && language != "all") "&translatedLanguage[]=$language" else ""
+            val langParam = if (!language.isNullOrBlank() && language != "all") {
+                "&translatedLanguage[]=$language"
+            } else {
+                "&translatedLanguage[]=en"
+            }
             val url = "$baseUrl/manga/$cleanId/feed?limit=100&order[chapter]=asc$langParam"
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)")
+                .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty body")
+            if (!response.isSuccessful) {
+                throw IOException("MangaDex chapters error: HTTP ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IOException("Empty response from MangaDex")
             val json = JSONObject(body)
-            val dataArray = json.getJSONArray("data")
+            val dataArray = json.optJSONArray("data") ?: org.json.JSONArray()
             val chapters = mutableListOf<Chapter>()
 
             for (i in 0 until dataArray.length()) {
@@ -116,11 +146,11 @@ class MangaDexSource(
                 val vol = attr.optString("volume", "")
                 val title = attr.optString("title", "")
                 val lang = attr.optString("translatedLanguage", "en")
-                val date = attr.optString("publishAt", "Recent")
-                    .take(10)
+                val date = attr.optString("publishAt", "Recent").take(10)
+
                 val formattedName = buildString {
                     if (vol.isNotEmpty()) append("Vol. $vol ")
-                    append("Chapter $chNumStr")
+                    append("Ch. $chNumStr")
                     if (title.isNotEmpty()) append(": $title")
                 }
 
@@ -132,26 +162,64 @@ class MangaDexSource(
                         name = formattedName,
                         number = chNum,
                         volume = if (vol.isNotEmpty()) "Volume $vol" else "",
-                        scanlator = "MangaDex Scan",
+                        scanlator = "MangaDex",
                         dateUpload = date,
                         language = lang,
-                        pageCount = attr.optInt("pages", 20)
+                        pageCount = attr.optInt("pages", 0)
                     )
                 )
             }
-            if (chapters.isEmpty()) throw Exception("No online chapters parsed")
+            if (chapters.isEmpty()) {
+                // If specific language is empty, try fallback to all languages
+                val fallbackUrl = "$baseUrl/manga/$cleanId/feed?limit=100&order[chapter]=asc"
+                val fallbackReq = Request.Builder().url(fallbackUrl).header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)").build()
+                val fallbackResp = client.newCall(fallbackReq).execute()
+                if (fallbackResp.isSuccessful) {
+                    val fBody = fallbackResp.body?.string()
+                    if (fBody != null) {
+                        val fData = JSONObject(fBody).optJSONArray("data")
+                        if (fData != null) {
+                            for (i in 0 until fData.length()) {
+                                val item = fData.getJSONObject(i)
+                                val id = item.getString("id")
+                                val attr = item.getJSONObject("attributes")
+                                val chNumStr = attr.optString("chapter", (i + 1).toString())
+                                val chNum = chNumStr.toFloatOrNull() ?: (i + 1).toFloat()
+                                val title = attr.optString("title", "")
+                                chapters.add(
+                                    Chapter(
+                                        id = id,
+                                        mangaId = mangaId,
+                                        sourceId = source.id,
+                                        name = if (title.isNotEmpty()) "Ch. $chNumStr: $title" else "Chapter $chNumStr",
+                                        number = chNum,
+                                        scanlator = "MangaDex",
+                                        dateUpload = attr.optString("publishAt", "Recent").take(10),
+                                        language = attr.optString("translatedLanguage", "en")
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (chapters.isEmpty()) throw IOException("No chapters found on MangaDex for this title")
             chapters
-        }.recoverCatching {
-            getFallbackChapters(mangaId)
         }
     }
 
     override suspend fun getPages(chapterId: String): Result<List<MangaPage>> = withContext(Dispatchers.IO) {
         runCatching {
             val url = "$baseUrl/at-home/server/$chapterId"
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "MangaFlow/2.0 (Android; Kotatsu-Reader)")
+                .build()
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty body")
+            if (!response.isSuccessful) {
+                throw IOException("MangaDex page server error: HTTP ${response.code}")
+            }
+            val body = response.body?.string() ?: throw IOException("Empty response from MangaDex server")
             val json = JSONObject(body)
             val base = json.getString("baseUrl")
             val chapterObj = json.getJSONObject("chapter")
@@ -170,63 +238,90 @@ class MangaDexSource(
                     )
                 )
             }
-            if (pages.isEmpty()) throw Exception("No pages returned")
+            if (pages.isEmpty()) throw IOException("No pages returned from MangaDex")
             pages
-        }.recoverCatching {
-            getFallbackPages(chapterId)
         }
     }
 
     private fun parseMangaList(jsonString: String): List<Manga> {
+        val list = mutableListOf<Manga>()
         val json = JSONObject(jsonString)
-        val dataArray = json.getJSONArray("data")
-        val result = mutableListOf<Manga>()
+        val dataArray = json.optJSONArray("data") ?: return emptyList()
+
         for (i in 0 until dataArray.length()) {
             val item = dataArray.getJSONObject(i)
-            result.add(parseMangaJson(item))
+            list.add(parseMangaJson(item))
         }
-        return result
+        return list
     }
 
     private fun parseMangaJson(item: JSONObject): Manga {
-        val id = "mangadex_" + item.getString("id")
-        val rawId = item.getString("id")
+        val id = item.getString("id")
         val attr = item.getJSONObject("attributes")
-        val titleObj = attr.optJSONObject("title")
-        val title = titleObj?.optString("en")
-            ?: titleObj?.optString("ja-ro")
-            ?: titleObj?.keys()?.asSequence()?.firstOrNull()?.let { titleObj.optString(it) }
-            ?: "Manga Title"
 
-        val altTitles = attr.optJSONArray("altTitles")
-        val altTitle = if (altTitles != null && altTitles.length() > 0) {
-            val firstAlt = altTitles.getJSONObject(0)
-            firstAlt.optString("vi", firstAlt.optString("en", firstAlt.optString("ja", "")))
-        } else ""
+        val titleMap = attr.optJSONObject("title")
+        val title = if (titleMap != null) {
+            titleMap.optString("en",
+                titleMap.optString("ja-ro",
+                    titleMap.optString("en-us",
+                        titleMap.optString("ko-ro",
+                            titleMap.optString("zh-ro",
+                                titleMap.optString("ja",
+                                    titleMap.optString("ko",
+                                        titleMap.optString("zh",
+                                            titleMap.keys().asSequence().firstOrNull()?.let { titleMap.optString(it) } ?: "Manga Title"
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        } else {
+            "Manga Title"
+        }
 
-        val descObj = attr.optJSONObject("description")
-        val description = descObj?.optString("en", descObj.optString("vi", "No description available."))
-            ?: "A gripping manga series."
+        var altTitle = ""
+        val altTitlesArray = attr.optJSONArray("altTitles")
+        if (altTitlesArray != null && altTitlesArray.length() > 0) {
+            val firstAlt = altTitlesArray.getJSONObject(0)
+            altTitle = firstAlt.optString("en", firstAlt.optString("ja", firstAlt.optString("ja-ro", "")))
+        }
 
-        val statusRaw = attr.optString("status", "ongoing")
-        val status = statusRaw.replaceFirstChar { it.uppercase() }
+        val descMap = attr.optJSONObject("description")
+        val description = if (descMap != null) {
+            descMap.optString("en",
+                descMap.optString("ja",
+                    descMap.keys().asSequence().firstOrNull()?.let { descMap.optString(it) } ?: "Popular manga series on MangaDex."
+                )
+            )
+        } else {
+            "Popular manga series on MangaDex."
+        }
 
-        // Find cover art relationship
-        var coverFilename = ""
+        val status = attr.optString("status", "Ongoing").replaceFirstChar { it.uppercase() }
+
+        var coverFileName = ""
+        var authorName = "MangaDex Artist"
         val rels = item.optJSONArray("relationships")
         if (rels != null) {
             for (j in 0 until rels.length()) {
                 val rel = rels.getJSONObject(j)
-                if (rel.optString("type") == "cover_art") {
-                    coverFilename = rel.optJSONObject("attributes")?.optString("fileName", "") ?: ""
+                val type = rel.optString("type")
+                if (type == "cover_art") {
+                    coverFileName = rel.optJSONObject("attributes")?.optString("fileName", "") ?: ""
+                } else if (type == "author") {
+                    val auth = rel.optJSONObject("attributes")?.optString("name", "") ?: ""
+                    if (auth.isNotEmpty()) authorName = auth
                 }
             }
         }
 
-        val coverUrl = if (coverFilename.isNotEmpty()) {
-            "https://uploads.mangadex.org/covers/$rawId/$coverFilename.512.jpg"
+        val coverUrl = if (coverFileName.isNotEmpty()) {
+            "https://uploads.mangadex.org/covers/$id/$coverFileName.256.jpg"
         } else {
-            "https://cdn.myanimelist.net/images/manga/2/253119.jpg"
+            ""
         }
 
         val tagsArray = attr.optJSONArray("tags")
@@ -244,53 +339,13 @@ class MangaDexSource(
             sourceId = source.id,
             title = title,
             altTitle = altTitle,
-            author = "MangaDex Artist",
+            author = authorName,
             description = description,
             coverUrl = coverUrl,
             status = status,
             rating = 8.8f,
             genres = if (genres.isNotEmpty()) genres else listOf("Manga", "Web Comic"),
-            totalChapters = 25
+            totalChapters = 0
         )
-    }
-
-    private fun getFallbackMangaList(): List<Manga> {
-        return SourceCatalogDataProvider.getMangaForSource("mangadex", "MangaDex", "Manga", "en")
-    }
-
-    private fun getFallbackChapters(mangaId: String): List<Chapter> {
-        return (1..18).map { num ->
-            Chapter(
-                id = "${mangaId}_ch_$num",
-                mangaId = mangaId,
-                sourceId = source.id,
-                name = "Ngày $num",
-                number = num.toFloat(),
-                volume = "Tập 1",
-                scanlator = "Senukin",
-                dateUpload = "Jul 10, 2023",
-                language = "vi",
-                isRead = num <= 13,
-                pageCount = 14
-            )
-        }
-    }
-
-    private fun getFallbackPages(chapterId: String): List<MangaPage> {
-        // High quality webtoon pages for seamless reading
-        val sampleUrls = listOf(
-            "https://cdn.myanimelist.net/images/manga/3/188896.jpg",
-            "https://cdn.myanimelist.net/images/manga/2/258237.jpg",
-            "https://cdn.myanimelist.net/images/manga/1/259070.jpg",
-            "https://cdn.myanimelist.net/images/manga/3/54525.jpg",
-            "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
-            "https://cdn.myanimelist.net/images/manga/3/258224.jpg"
-        )
-        return sampleUrls.mapIndexed { index, url ->
-            MangaPage(
-                index = index + 1,
-                imageUrl = url
-            )
-        }
     }
 }

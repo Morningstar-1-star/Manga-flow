@@ -31,7 +31,7 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = KotatsuDatabase.getInstance(application)
     private val sourceManager = SourceManager(database.sourceConfigDao())
-    val repository = MangaRepository(database, sourceManager)
+    val repository = MangaRepository(application, database, sourceManager)
 
     // Settings State
     private val _appSettings = MutableStateFlow(AppSettings())
@@ -147,6 +147,15 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedSourceId = MutableStateFlow<String?>(null)
     val selectedSourceId: StateFlow<String?> = _selectedSourceId.asStateFlow()
 
+    private val _currentPage = MutableStateFlow(1)
+    val currentPage: StateFlow<Int> = _currentPage.asStateFlow()
+
+    private val _isLoadingMore = MutableStateFlow(false)
+    val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
+
+    private val _hasMorePages = MutableStateFlow(true)
+    val hasMorePages: StateFlow<Boolean> = _hasMorePages.asStateFlow()
+
     init {
         // Load initial explore search results across sources
         loadSourceManga(null)
@@ -155,38 +164,43 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     fun selectSourceFeed(sourceId: String?) {
         _selectedSourceId.value = sourceId
         _searchQuery.value = ""
+        _currentPage.value = 1
+        _hasMorePages.value = true
         loadSourceManga(sourceId)
     }
 
     fun onSearchQueryChanged(query: String) {
         _searchQuery.value = query
+        _currentPage.value = 1
+        _hasMorePages.value = true
         searchManga(query)
     }
 
     fun onFilterChipSelected(chip: String) {
         _selectedFilterChip.value = chip
+        _currentPage.value = 1
+        _hasMorePages.value = true
         searchManga(_searchQuery.value)
     }
 
     fun loadSourceManga(sourceId: String?) {
         viewModelScope.launch {
             _isSearching.value = true
+            _currentPage.value = 1
+            _hasMorePages.value = true
             try {
                 if (sourceId != null) {
                     val parser = sourceManager.getParser(sourceId)
-                    _searchResults.value = parser.getPopularManga().getOrDefault(emptyList())
+                    val result = parser.getPopularManga(1).getOrDefault(emptyList())
+                    _searchResults.value = result
                 } else {
-                    val activeList = listOf(
-                        "asurascans", "mangadex", "comick", "webtoons", "flamecomics",
-                        "reaperscans", "manganato", "tapastic", "cuutruyen", "truyengg",
-                        "doctruyen3q", "batoto", "tumangaonline", "shonenjumpplus"
-                    )
-                    val combined = activeList.flatMap { id ->
+                    val combined = mutableListOf<Manga>()
+                    val primaryParsers = listOf(sourceManager.mangaPill, sourceManager.mangaDex, sourceManager.weebCentral, sourceManager.guya)
+                    for (parser in primaryParsers) {
                         try {
-                            sourceManager.getParser(id).getPopularManga().getOrDefault(emptyList())
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
+                            val res = parser.getPopularManga(1).getOrNull()
+                            if (!res.isNullOrEmpty()) combined.addAll(res)
+                        } catch (_: Exception) {}
                     }
                     _searchResults.value = combined.distinctBy { it.id }
                 }
@@ -201,6 +215,8 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     fun searchManga(query: String) {
         viewModelScope.launch {
             _isSearching.value = true
+            _currentPage.value = 1
+            _hasMorePages.value = true
             try {
                 if (query.isBlank()) {
                     loadSourceManga(_selectedSourceId.value)
@@ -208,15 +224,74 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
                     val currentSource = _selectedSourceId.value
                     if (currentSource != null) {
                         val parser = sourceManager.getParser(currentSource)
-                        _searchResults.value = parser.searchManga(query).getOrDefault(emptyList())
+                        _searchResults.value = parser.searchManga(query, 1).getOrDefault(emptyList())
                     } else {
-                        _searchResults.value = sourceManager.searchAcrossSources(query)
+                        val aggregated = sourceManager.searchMangaAcrossSources(query)
+                        _searchResults.value = aggregated.map { it.primaryManga }
                     }
                 }
             } catch (e: Exception) {
                 _searchResults.value = emptyList()
             } finally {
                 _isSearching.value = false
+            }
+        }
+    }
+
+    fun loadNextPage() {
+        if (_isLoadingMore.value || _isSearching.value || !_hasMorePages.value) return
+        val nextPage = _currentPage.value + 1
+        val query = _searchQuery.value
+        val sourceId = _selectedSourceId.value
+
+        viewModelScope.launch {
+            _isLoadingMore.value = true
+            try {
+                val newItems = when {
+                    query.isNotBlank() && sourceId != null -> {
+                        val parser = sourceManager.getParser(sourceId)
+                        parser.searchManga(query, nextPage).getOrDefault(emptyList())
+                    }
+                    query.isNotBlank() && sourceId == null -> {
+                        // Multi-source search next page
+                        val primaryParsers = listOf(sourceManager.mangaPill, sourceManager.mangaDex, sourceManager.weebCentral)
+                        val moreList = mutableListOf<Manga>()
+                        for (parser in primaryParsers) {
+                            try {
+                                val res = parser.searchManga(query, nextPage).getOrNull()
+                                if (!res.isNullOrEmpty()) moreList.addAll(res)
+                            } catch (_: Exception) {}
+                        }
+                        moreList
+                    }
+                    sourceId != null -> {
+                        val parser = sourceManager.getParser(sourceId)
+                        parser.getPopularManga(nextPage).getOrDefault(emptyList())
+                    }
+                    else -> {
+                        val combined = mutableListOf<Manga>()
+                        val primaryParsers = listOf(sourceManager.mangaPill, sourceManager.mangaDex, sourceManager.weebCentral)
+                        for (parser in primaryParsers) {
+                            try {
+                                val res = parser.getPopularManga(nextPage).getOrNull()
+                                if (!res.isNullOrEmpty()) combined.addAll(res)
+                            } catch (_: Exception) {}
+                        }
+                        combined
+                    }
+                }
+
+                if (newItems.isEmpty()) {
+                    _hasMorePages.value = false
+                } else {
+                    _currentPage.value = nextPage
+                    val currentList = _searchResults.value
+                    _searchResults.value = (currentList + newItems).distinctBy { it.id }
+                }
+            } catch (e: Exception) {
+                _hasMorePages.value = false
+            } finally {
+                _isLoadingMore.value = false
             }
         }
     }
@@ -310,7 +385,7 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
     // Reader Functions
     fun openReader(mangaId: String, chapterId: String, sourceId: String) {
         viewModelScope.launch {
-            val pages = repository.getPages(sourceId, chapterId)
+            val pages = repository.getPages(sourceId, chapterId, mangaId)
             _readerPages.value = pages
             _currentPageIndex.value = 0
             _isReaderControlsVisible.value = false
@@ -379,6 +454,7 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
             repository.enqueueDownload(
                 mangaId = manga.id,
                 chapterId = chapter.id,
+                sourceId = manga.sourceId,
                 mangaTitle = manga.title,
                 chapterName = chapter.name,
                 coverUrl = manga.coverUrl
@@ -413,7 +489,9 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun enableAllSources(enable: Boolean) {
         viewModelScope.launch {
-            sourceManager.enableAllSources(enable)
+            sourceManager.activeParsers.forEach { p ->
+                sourceManager.toggleEnable(p.source.id, enable)
+            }
             _appSettings.value = _appSettings.value.copy(enableAllSources = enable)
         }
     }
@@ -444,6 +522,7 @@ class MangaViewModel(application: Application) : AndroidViewModel(application) {
             val pages = _readerPages.value
             val imageUrl = if (pageIndex in pages.indices) pages[pageIndex].imageUrl else ""
             val result = MangaTranslator.translateComicPage(
+                context = getApplication(),
                 pageIndex = pageIndex,
                 imageUrl = imageUrl,
                 sourceLang = "auto",

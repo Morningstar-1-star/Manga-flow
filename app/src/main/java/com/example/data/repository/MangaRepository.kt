@@ -1,11 +1,18 @@
 package com.example.data.repository
 
+import android.content.Context
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.example.data.download.ChapterDownloadWorker
 import com.example.data.local.BookmarkEntity
 import com.example.data.local.ChapterEntity
 import com.example.data.local.DownloadEntity
 import com.example.data.local.HistoryEntity
 import com.example.data.local.KotatsuDatabase
 import com.example.data.local.MangaEntity
+import com.example.data.local.PageEntity
 import com.example.data.model.Bookmark
 import com.example.data.model.Chapter
 import com.example.data.model.DownloadStatus
@@ -14,11 +21,15 @@ import com.example.data.model.HistoryItem
 import com.example.data.model.Manga
 import com.example.data.model.MangaPage
 import com.example.data.model.MangaSource
+import com.example.data.sources.SourceHealthManager
 import com.example.data.sources.SourceManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.io.File
+import java.io.IOException
 
 class MangaRepository(
+    val context: Context,
     private val database: KotatsuDatabase,
     val sourceManager: SourceManager
 ) {
@@ -27,6 +38,7 @@ class MangaRepository(
     private val historyDao = database.historyDao()
     private val bookmarkDao = database.bookmarkDao()
     private val downloadDao = database.downloadDao()
+    private val pageDao = database.pageDao()
 
     fun getSources(): Flow<List<MangaSource>> = sourceManager.getSourcesFlow()
 
@@ -110,7 +122,10 @@ class MangaRepository(
 
     suspend fun fetchAndStoreMangaDetails(mangaId: String, sourceId: String): Manga {
         val parser = sourceManager.getParser(sourceId)
-        val onlineManga = parser.getMangaDetails(mangaId).getOrNull()
+        val onlineMangaResult = SourceHealthManager.executeWithHealth(sourceId) {
+            parser.getMangaDetails(mangaId)
+        }
+        val onlineManga = onlineMangaResult.getOrNull()
         val local = mangaDao.getMangaByIdSync(mangaId)
 
         val merged = if (onlineManga != null) {
@@ -126,20 +141,64 @@ class MangaRepository(
             mangaDao.insertOrUpdate(entity)
             entity.toManga()
         } else {
-            local?.toManga() ?: parser.getPopularManga().getOrThrow().first()
+            local?.toManga() ?: throw IOException("Could not load details for $mangaId from $sourceId")
         }
 
         // Fetch online chapters
-        val onlineChapters = parser.getChapters(mangaId).getOrDefault(emptyList())
+        val onlineChaptersResult = SourceHealthManager.executeWithHealth(sourceId) {
+            parser.getChapters(mangaId)
+        }
+        val onlineChapters = onlineChaptersResult.getOrDefault(emptyList())
         if (onlineChapters.isNotEmpty()) {
             chapterDao.insertChapters(onlineChapters.map { it.toEntity() })
         }
         return merged
     }
 
-    suspend fun getPages(sourceId: String, chapterId: String): List<MangaPage> {
+    suspend fun getPages(sourceId: String, chapterId: String, mangaId: String = ""): List<MangaPage> {
+        // 1. Check if offline downloaded pages exist on disk
+        val cleanManga = mangaId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val cleanChapter = chapterId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val localDir = File(context.filesDir, "downloads/$cleanManga/$cleanChapter")
+        if (localDir.exists() && localDir.isDirectory) {
+            val pageFiles = localDir.listFiles { f ->
+                f.isFile && (f.name.endsWith(".jpg", true) || f.name.endsWith(".png", true) || f.name.endsWith(".webp", true))
+            }?.sortedBy { it.name } ?: emptyList()
+
+            if (pageFiles.isNotEmpty()) {
+                return pageFiles.mapIndexed { idx, file ->
+                    MangaPage(
+                        index = idx + 1,
+                        imageUrl = "file://${file.absolutePath}"
+                    )
+                }
+            }
+        }
+
+        // 2. Check local database cached pages
+        val cachedPages = pageDao.getPagesForChapter(chapterId)
+        if (cachedPages.isNotEmpty()) {
+            return cachedPages.map { MangaPage(index = it.pageIndex, imageUrl = it.imageUrl) }
+        }
+
+        // 3. Request fresh pages from source parser via SourceHealthManager
         val parser = sourceManager.getParser(sourceId)
-        return parser.getPages(chapterId).getOrDefault(emptyList())
+        val pagesResult = SourceHealthManager.executeWithHealth(sourceId) {
+            parser.getPages(chapterId)
+        }
+        val pages = pagesResult.getOrThrow()
+
+        // Cache pages in Room
+        if (pages.isNotEmpty()) {
+            pageDao.insertPages(pages.map {
+                PageEntity(
+                    chapterId = chapterId,
+                    pageIndex = it.index,
+                    imageUrl = it.imageUrl
+                )
+            })
+        }
+        return pages
     }
 
     suspend fun updateReadingProgress(
@@ -197,33 +256,77 @@ class MangaRepository(
         }
     }
 
+    /**
+     * Enqueues real background chapter download via WorkManager
+     */
     suspend fun enqueueDownload(
         mangaId: String,
         chapterId: String,
+        sourceId: String,
         mangaTitle: String,
         chapterName: String,
         coverUrl: String
     ) {
+        val downloadId = "${mangaId}_$chapterId"
         downloadDao.insertOrUpdate(
             DownloadEntity(
-                id = "${mangaId}_$chapterId",
+                id = downloadId,
                 mangaId = mangaId,
                 chapterId = chapterId,
                 mangaTitle = mangaTitle,
                 chapterName = chapterName,
                 coverUrl = coverUrl,
-                progress = 0.1f,
+                progress = 0.0f,
                 status = DownloadStatus.DOWNLOADING.name,
-                speedText = "2.8 MB/s",
-                etaText = "In 2 minutes"
+                speedText = "Starting...",
+                etaText = "Queued"
             )
         )
-        chapterDao.updateDownloadStatus(chapterId, isDownloaded = false, progress = 10)
+        chapterDao.updateDownloadStatus(chapterId, isDownloaded = false, progress = 0)
+
+        val workData = workDataOf(
+            "chapterId" to chapterId,
+            "mangaId" to mangaId,
+            "sourceId" to sourceId,
+            "mangaTitle" to mangaTitle,
+            "chapterName" to chapterName,
+            "coverUrl" to coverUrl
+        )
+
+        val downloadWork = OneTimeWorkRequestBuilder<ChapterDownloadWorker>()
+            .setInputData(workData)
+            .addTag("download_${mangaId}_$chapterId")
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "work_${mangaId}_$chapterId",
+            ExistingWorkPolicy.REPLACE,
+            downloadWork
+        )
     }
 
-    suspend fun pauseAllDownloads() = downloadDao.pauseAll()
+    suspend fun pauseAllDownloads() {
+        WorkManager.getInstance(context).cancelAllWorkByTag("download")
+        downloadDao.pauseAll()
+    }
+
     suspend fun resumeAllDownloads() = downloadDao.resumeAll()
-    suspend fun cancelDownload(id: String) = downloadDao.deleteDownload(id)
+
+    suspend fun cancelDownload(id: String) {
+        WorkManager.getInstance(context).cancelUniqueWork("work_$id")
+        downloadDao.deleteDownload(id)
+    }
+
+    suspend fun deleteDownloadedChapter(mangaId: String, chapterId: String) {
+        val cleanManga = mangaId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val cleanChapter = chapterId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val localDir = File(context.filesDir, "downloads/$cleanManga/$cleanChapter")
+        if (localDir.exists()) {
+            localDir.deleteRecursively()
+        }
+        chapterDao.updateDownloadStatus(chapterId, isDownloaded = false, progress = 0)
+        downloadDao.deleteDownload("${mangaId}_$chapterId")
+    }
 
     suspend fun clearHistory() = historyDao.clearHistory()
     suspend fun clearLibrary() = mangaDao.clearLibrary()
@@ -287,7 +390,8 @@ class MangaRepository(
         lastReadPage = lastReadPage,
         lastReadTime = lastReadTime,
         totalChapters = totalChapters,
-        readProgressPercent = readProgressPercent
+        readProgressPercent = readProgressPercent,
+        preferredReadMode = "WEBTOON"
     )
 
     private fun ChapterEntity.toChapter(): Chapter = Chapter(

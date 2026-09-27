@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.remember
-import com.example.data.sources.SourceCatalogDataProvider
 import coil.compose.AsyncImage
 import com.example.ui.theme.KotatsuCardBorder
 import com.example.ui.theme.KotatsuDarkBg
@@ -66,23 +65,18 @@ fun FeedScreen(
     modifier: Modifier = Modifier
 ) {
     val libraryManga by viewModel.libraryManga.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
 
-    val updates = remember(libraryManga) {
-        val realManga = listOf(
-            SourceCatalogDataProvider.getMangaForSource("asura", "Asura Scans", "Manhwa", "en"),
-            SourceCatalogDataProvider.getMangaForSource("comick", "ComicK", "Manga", "en"),
-            SourceCatalogDataProvider.getMangaForSource("mangadex", "MangaDex", "Manga", "en"),
-            SourceCatalogDataProvider.getMangaForSource("cuutruyen", "Cứu Truyện", "Manga", "vi")
-        ).flatten()
-
+    val updates = remember(libraryManga, searchResults) {
+        val mangaList = if (libraryManga.isNotEmpty()) libraryManga else searchResults.take(10)
         val timeLabels = listOf("10 minutes ago", "25 minutes ago", "1 hour ago", "3 hours ago", "5 hours ago", "Yesterday", "2 days ago")
-        realManga.take(8).mapIndexed { idx, m ->
+        mangaList.take(8).mapIndexed { idx, m ->
             FeedUpdateItem(
                 mangaId = m.id,
                 sourceId = m.sourceId,
                 mangaTitle = m.title,
                 coverUrl = m.coverUrl,
-                newChapterName = "Chapter ${m.totalChapters}: Latest Update",
+                newChapterName = "Chapter ${if (m.totalChapters > 0) m.totalChapters else idx + 1}",
                 timeAgo = timeLabels.getOrElse(idx) { "Recently" }
             )
         }

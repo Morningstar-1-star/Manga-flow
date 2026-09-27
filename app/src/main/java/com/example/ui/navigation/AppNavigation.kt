@@ -435,7 +435,11 @@ fun AppNavHost(
         composable(Screen.SourceCatalog.route) {
             SourceCatalogScreen(
                 viewModel = viewModel,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onSourceClick = { sourceId ->
+                    viewModel.selectSourceFeed(sourceId)
+                    navController.navigate(Screen.Search.route)
+                }
             )
         }
 

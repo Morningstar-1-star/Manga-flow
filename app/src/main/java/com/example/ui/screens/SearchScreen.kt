@@ -50,6 +50,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,8 +90,26 @@ fun SearchScreen(
     val query by viewModel.searchQuery.collectAsState()
     val results by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
+    val hasMorePages by viewModel.hasMorePages.collectAsState()
     val selectedFilterChip by viewModel.selectedFilterChip.collectAsState()
     val searchFilter by viewModel.searchFilter.collectAsState()
+
+    val gridState = rememberLazyGridState()
+
+    val shouldLoadMore by remember(gridState) {
+        derivedStateOf {
+            val totalItems = gridState.layoutInfo.totalItemsCount
+            val lastVisibleItem = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisibleItem >= totalItems - 4
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && !isSearching && !isLoadingMore && hasMorePages) {
+            viewModel.loadNextPage()
+        }
+    }
 
     var showFilterBottomSheet by remember { mutableStateOf(false) }
 
@@ -245,19 +267,44 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
                         Text(
-                            text = "No manga found",
+                            text = if (query.isNotBlank()) "No manga found for \"$query\"" else "No manga loaded",
+                            color = KotatsuTextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (activeSourceId != null) "Source '$currentChipName' returned no items for this query" else "Try searching across popular titles or reload",
                             color = KotatsuTextSecondary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Try adjusting your search terms or filters",
-                            color = KotatsuTeal,
-                            fontSize = 13.sp
-                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = {
+                                    if (query.isNotBlank()) viewModel.searchManga(query)
+                                    else viewModel.loadSourceManga(activeSourceId)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = KotatsuTeal, contentColor = Color.Black),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Reload Feed", fontWeight = FontWeight.SemiBold)
+                            }
+                            if (activeSourceId != null) {
+                                OutlinedButton(
+                                    onClick = { viewModel.selectSourceFeed(null) },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("All Sources", color = KotatsuTeal)
+                                }
+                            }
+                        }
                     }
                 }
             } else if (activeSourceId == null && query.isNotEmpty()) {
@@ -335,6 +382,7 @@ fun SearchScreen(
                 }
             } else {
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Adaptive(minSize = 115.dp),
                     contentPadding = PaddingValues(bottom = 32.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -347,6 +395,50 @@ fun SearchScreen(
                             progressPercent = if (manga.readProgressPercent > 0) manga.readProgressPercent else null,
                             onClick = { onNavigateToMangaDetails(manga.id, manga.sourceId) }
                         )
+                    }
+
+                    if (isLoadingMore) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = KotatsuTeal,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = "Loading more titles...",
+                                        color = KotatsuTextSecondary,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
+                    } else if (hasMorePages && filteredResults.size >= 15) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                OutlinedButton(
+                                    onClick = { viewModel.loadNextPage() },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = KotatsuTeal)
+                                ) {
+                                    Text("Load More Manga (${filteredResults.size} loaded)", fontSize = 13.sp)
+                                }
+                            }
+                        }
                     }
                 }
             }

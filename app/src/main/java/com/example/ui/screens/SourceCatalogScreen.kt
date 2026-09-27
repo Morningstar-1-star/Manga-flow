@@ -94,6 +94,7 @@ import com.example.ui.viewmodel.MangaViewModel
 fun SourceCatalogScreen(
     viewModel: MangaViewModel,
     onBackClick: () -> Unit,
+    onSourceClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Kotatsu Sources, 1: Mihon Extensions, 2: Health
@@ -391,6 +392,7 @@ fun SourceCatalogScreen(
                         items(filteredSources, key = { it.id }) { source ->
                             SourceCatalogItem(
                                 source = source,
+                                onClick = { onSourceClick(source.id) },
                                 onPinClick = { viewModel.togglePinSource(source.id, !source.isPinned) },
                                 onToggleEnabled = { viewModel.toggleEnableSource(source.id, it) },
                                 onDeleteClick = { viewModel.deleteSource(source.id) },
@@ -583,13 +585,16 @@ fun SourceCatalogScreen(
 @Composable
 private fun SourceCatalogItem(
     source: MangaSource,
+    onClick: () -> Unit = {},
     onPinClick: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     onDeleteClick: () -> Unit,
     onTestClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, KotatsuCardBorder)

@@ -98,3 +98,34 @@ data class SourceConfigEntity(
     val isEnabled: Boolean = true,
     val language: String = "en"
 )
+
+@Entity(tableName = "pages", primaryKeys = ["chapterId", "pageIndex"])
+data class PageEntity(
+    val chapterId: String,
+    val pageIndex: Int,
+    val imageUrl: String,
+    val headersJson: String = "",
+    val localFilePath: String? = null
+)
+
+@Entity(tableName = "translation_cache")
+data class TranslationCacheEntity(
+    @PrimaryKey val cacheKey: String,
+    val pageIndex: Int,
+    val sourceLanguage: String,
+    val targetLanguage: String,
+    val bubblesJson: String,
+    val fullSummary: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "reading_progress")
+data class ReadingProgressEntity(
+    @PrimaryKey val id: String,
+    val mangaId: String,
+    val chapterId: String,
+    val lastPageRead: Int,
+    val totalPages: Int,
+    val progressPercent: Int,
+    val updatedAt: Long = System.currentTimeMillis()
+)

@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.Manga
 import androidx.compose.material3.MaterialTheme
-import com.example.data.sources.SourceCatalogDataProvider
 import com.example.ui.components.QuickActionTile
 import com.example.ui.components.SourceGridItem
 import com.example.ui.components.TopSearchBar
@@ -78,6 +77,8 @@ fun ExploreScreen(
 ) {
     val sources by viewModel.sources.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
+    val libraryManga by viewModel.libraryManga.collectAsState()
 
     val appBgColor = MaterialTheme.colorScheme.background
     val appSurfaceColor = MaterialTheme.colorScheme.surface
@@ -174,8 +175,8 @@ fun ExploreScreen(
 
             // Suggestions Featured Card (Authentic Manga from catalog)
             item(span = { GridItemSpan(4) }) {
-                val featuredManga = remember {
-                    SourceCatalogDataProvider.getMangaForSource("mangadex", "MangaDex", "Manga", "en").firstOrNull()
+                val featuredManga = remember(searchResults, libraryManga) {
+                    searchResults.firstOrNull() ?: libraryManga.firstOrNull()
                 }
                 Card(
                     modifier = Modifier
@@ -196,19 +197,31 @@ fun ExploreScreen(
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AsyncImage(
-                            model = featuredManga?.coverUrl ?: "https://cdn.myanimelist.net/images/manga/3/232056.jpg",
-                            contentDescription = featuredManga?.title ?: "Featured Manga",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(KotatsuDarkSurfaceVariant)
-                        )
+                        if (featuredManga != null && featuredManga.coverUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = featuredManga.coverUrl,
+                                contentDescription = featuredManga.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(KotatsuDarkSurfaceVariant)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(KotatsuTeal.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("✨", fontSize = 24.sp)
+                            }
+                        }
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = featuredManga?.title ?: "Frieren: Beyond Journey's End",
+                                text = featuredManga?.title ?: "Discover Manga Catalogs",
                                 color = KotatsuTextPrimary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -217,7 +230,11 @@ fun ExploreScreen(
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = featuredManga?.genres?.joinToString(", ") ?: "Fantasy, Adventure, Drama",
+                                text = if (featuredManga != null && featuredManga.genres.isNotEmpty()) {
+                                    featuredManga.genres.joinToString(", ")
+                                } else {
+                                    "Tap to explore sources and read titles online"
+                                },
                                 color = KotatsuTextSecondary,
                                 fontSize = 12.sp,
                                 maxLines = 2,

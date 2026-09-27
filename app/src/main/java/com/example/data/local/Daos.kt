@@ -117,6 +117,9 @@ interface DownloadDao {
     @Query("UPDATE downloads SET status = :status, progress = :progress, speedText = :speed, etaText = :eta WHERE id = :id")
     suspend fun updateProgress(id: String, status: String, progress: Float, speed: String, eta: String)
 
+    @Query("UPDATE downloads SET status = :status WHERE id = :id")
+    suspend fun updateStatus(id: String, status: String)
+
     @Query("DELETE FROM downloads WHERE id = :id")
     suspend fun deleteDownload(id: String)
 
@@ -143,4 +146,40 @@ interface SourceConfigDao {
 
     @Query("DELETE FROM source_configs WHERE id = :id")
     suspend fun deleteConfig(id: String)
+}
+
+@Dao
+interface PageDao {
+    @Query("SELECT * FROM pages WHERE chapterId = :chapterId ORDER BY pageIndex ASC")
+    suspend fun getPagesForChapter(chapterId: String): List<PageEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPages(pages: List<PageEntity>)
+
+    @Query("DELETE FROM pages WHERE chapterId = :chapterId")
+    suspend fun deletePagesForChapter(chapterId: String)
+}
+
+@Dao
+interface TranslationCacheDao {
+    @Query("SELECT * FROM translation_cache WHERE cacheKey = :key LIMIT 1")
+    suspend fun getTranslation(key: String): TranslationCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTranslation(entity: TranslationCacheEntity)
+
+    @Query("DELETE FROM translation_cache")
+    suspend fun clearAll()
+}
+
+@Dao
+interface ReadingProgressDao {
+    @Query("SELECT * FROM reading_progress WHERE mangaId = :mangaId AND chapterId = :chapterId LIMIT 1")
+    suspend fun getProgress(mangaId: String, chapterId: String): ReadingProgressEntity?
+
+    @Query("SELECT * FROM reading_progress WHERE mangaId = :mangaId ORDER BY updatedAt DESC")
+    fun getProgressForManga(mangaId: String): Flow<List<ReadingProgressEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveProgress(progress: ReadingProgressEntity)
 }
