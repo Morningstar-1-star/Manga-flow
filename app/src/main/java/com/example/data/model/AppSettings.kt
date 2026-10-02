@@ -24,14 +24,14 @@ data class AppSettings(
     // Liquid Glass Navigation (Abdullajon1881/LiquidGlass)
     val liquidGlassNavEnabled: Boolean = true,
     val liquidGlassIntensity: String = "Balanced", // Subtle, Balanced, Strong
-    val liquidGlassBlurDp: Float = 18f, // 0..30 dp
-    val liquidGlassRefractionDp: Float = 12f, // 0..24 dp
-    val liquidGlassChromaticAberration: String = "Low", // OFF, Low, Medium
+    val liquidGlassBlurDp: Float = 10f, // 0..30 dp (crystal-clear iOS style)
+    val liquidGlassRefractionDp: Float = 18f, // 0..24 dp (strong curved edge lensing)
+    val liquidGlassChromaticAberration: String = "Medium", // OFF, Low, Medium
     val liquidGlassRimHighlight: Boolean = true,
     val liquidGlassGelPress: Boolean = true,
     val liquidGlassTintOption: String = "System", // System, Custom
     val liquidGlassCustomTintColor: Long = 0xFF14B8A6,
-    val liquidGlassTransparency: Float = 0.25f, // 0.0 to 1.0
+    val liquidGlassTransparency: Float = 0.08f, // 0.0 to 1.0 (crystal-clear glass sheen)
     val liquidGlassReducedTransparency: Boolean = false,
     val liquidGlassPerformanceMode: String = "Auto", // Auto, Battery Saver, Maximum quality
 

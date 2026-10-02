@@ -3,25 +3,18 @@ package dev.liquidglass.core
 /**
  * AGSL source for the Liquid Glass shader.
  *
- * The shader receives the already blurred and saturated backdrop as the
- * [GlassUniforms.CONTENT] input and performs, per pixel:
- *
- *  1. **Scene SDF** — smooth union (polynomial smooth-min) of up to
- *     [GlassUniforms.MAX_SHAPES] rounded rectangles, which is what lets nearby
- *     glass elements melt into one liquid form.
- *  2. **Edge refraction** — a circular lens profile along the rim displaces the
- *     backdrop sample toward the shape center, bending the world the way a convex
- *     glass slab does.
- *  3. **Gel press** — a Gaussian bulge around the touch point.
- *  4. **Chromatic aberration** — optional RGB dispersion along the lens normal.
- *  5. **Tint, specular rim, grain** — surface color, a thin angle-dependent rim
- *     light, and dither noise that prevents gradient banding.
- *
- * Every formula has a Kotlin twin in [GlassMath]; keep them in lockstep.
- *
- * AGSL constraints honored here: SkSL types only (`float2`/`half4`, never GLSL
- * `vec*`), constant loop bounds, no derivative intrinsics (normals use central
- * differences), and a single `half4 main(float2)` entry point.
+ * Implements Apple-style Liquid Glass optics:
+ * 1. **Scene SDF & Smooth Union** — polynomial smooth-min (`smin`) of rounded
+ *    rectangle shapes up to [GlassUniforms.MAX_SHAPES], enabling organic liquid
+ *    metaball merging between navigation shapes and gliding indicator bubbles.
+ * 2. **3D Lens Refraction & Magnification** — continuous convex 3D dome profile
+ *    and rim refraction that displaces the backdrop along surface normal vectors,
+ *    bending and magnifying scrolling content.
+ * 3. **Elastic Gel Bulge** — Gaussian displacement around touch points.
+ * 4. **Prismatic Chromatic Dispersion** — splits RGB channels along normal vectors
+ *    to produce realistic rainbow light dispersion along glass contours.
+ * 5. **Polished Specular Rim & Gloss** — angle-dependent rim light, top-light key catch,
+ *    tint blending, and anti-banding dither noise.
  */
 public object LiquidGlassShaders {
 
@@ -79,7 +72,9 @@ float2 sceneNormal(float2 p) {
 half4 main(float2 fragCoord) {
     float2 p = fragCoord;
     float sd = sceneSd(p);
-    float mask = 1.0 - smoothstep(-1.0, 1.0, sd);
+    
+    // Smooth anti-aliased edge mask
+    float mask = 1.0 - smoothstep(-1.2, 0.8, sd);
     if (mask <= 0.001) {
         return half4(0.0);
     }
@@ -87,21 +82,26 @@ half4 main(float2 fragCoord) {
     float2 normal = sceneNormal(p);
     float edgeDist = max(-sd, 0.0);
 
-    float lens = 0.0;
-    float2 sampleCoord = p;
-    if (edgeDist < ${GlassUniforms.REFRACTION_HEIGHT}) {
-        float x = 1.0 - edgeDist / max(${GlassUniforms.REFRACTION_HEIGHT}, 0.0001);
-        lens = 1.0 - sqrt(max(1.0 - x * x, 0.0));
-        sampleCoord = p - normal * (${GlassUniforms.REFRACTION_AMOUNT} * lens);
-    }
+    // Continuous 3D Convex Lens Profile: refracts and magnifies across full surface
+    float refHeight = max(${GlassUniforms.REFRACTION_HEIGHT}, 1.0);
+    float normDist = clamp(edgeDist / refHeight, 0.0, 1.0);
+    float lensDome = sin(normDist * 1.5707963); // 0..1 smooth dome
+    float rimFactor = 1.0 - normDist; // peak at rim
+    
+    // Total displacement along surface normal
+    float refractionStrength = ${GlassUniforms.REFRACTION_AMOUNT} * (0.35 * lensDome + 0.65 * rimFactor);
+    float2 sampleCoord = p - normal * refractionStrength;
 
+    // Elastic Gel Press Bulge Interaction
     if (${GlassUniforms.PRESS_AMOUNT} > 0.001) {
         float2 toPress = p - ${GlassUniforms.PRESS_POINT};
-        float falloff = exp(-dot(toPress, toPress) / 8000.0);
-        sampleCoord -= toPress * (${GlassUniforms.PRESS_AMOUNT} * 0.08 * falloff);
+        float distSq = dot(toPress, toPress);
+        float falloff = exp(-distSq / 7500.0);
+        sampleCoord -= toPress * (${GlassUniforms.PRESS_AMOUNT} * 0.12 * falloff);
     }
 
-    float caShift = ${GlassUniforms.CHROMATIC_ABERRATION} * lens * abs(${GlassUniforms.REFRACTION_AMOUNT}) * 0.12;
+    // Prismatic Chromatic Aberration (RGB Channel Splitting along Normal)
+    float caShift = ${GlassUniforms.CHROMATIC_ABERRATION} * (0.25 + 0.75 * rimFactor) * abs(${GlassUniforms.REFRACTION_AMOUNT}) * 0.22;
     float4 color;
     if (caShift > 0.001) {
         float2 caOffset = normal * caShift;
@@ -113,13 +113,20 @@ half4 main(float2 fragCoord) {
         color = float4(${GlassUniforms.CONTENT}.eval(sampleCoord));
     }
 
+    // Luminous Surface Tint Blending
     color.rgb = mix(color.rgb, ${GlassUniforms.TINT}.rgb, ${GlassUniforms.TINT}.a);
 
-    float rim = 1.0 - smoothstep(0.0, max(${GlassUniforms.HIGHLIGHT_WIDTH}, 0.0001), edgeDist);
-    float facing = pow(abs(dot(normal, ${GlassUniforms.LIGHT_DIRECTION})), 1.5);
-    float pressBoost = 1.0 + ${GlassUniforms.PRESS_AMOUNT} * 0.6;
-    color.rgb += float3(rim * facing * ${GlassUniforms.HIGHLIGHT_ALPHA} * pressBoost);
+    // Polished Specular Rim Catch & Key Light
+    float rimWidth = max(${GlassUniforms.HIGHLIGHT_WIDTH}, 0.0001);
+    float rim = 1.0 - smoothstep(0.0, rimWidth, edgeDist);
+    float facing = pow(max(0.0, dot(normal, ${GlassUniforms.LIGHT_DIRECTION})), 1.2);
+    float topLight = pow(max(0.0, -normal.y), 2.0) * 0.35; // Glossy top edge sheen
+    
+    float pressBoost = 1.0 + ${GlassUniforms.PRESS_AMOUNT} * 0.8;
+    float specularTotal = (rim * facing * ${GlassUniforms.HIGHLIGHT_ALPHA} + rim * topLight) * pressBoost;
+    color.rgb += float3(specularTotal);
 
+    // Dither Noise (Prevents gradient banding)
     float noise = fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
     color.rgb += float3(noise * ${GlassUniforms.NOISE_ALPHA});
 

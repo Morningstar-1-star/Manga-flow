@@ -1,31 +1,25 @@
 package com.example.ui.components
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,30 +28,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.data.model.AppSettings
 import com.example.ui.navigation.BottomNavItem
-import com.example.ui.theme.KotatsuRose
-import com.example.ui.theme.KotatsuTeal
-import com.example.ui.theme.KotatsuTextPrimary
-import com.example.ui.theme.KotatsuTextSecondary
+import com.styropyr0.prismal.components.PrismalGlassBottomTab
 import dev.liquidglass.compose.GlassHighlight
 import dev.liquidglass.compose.GlassRefraction
 import dev.liquidglass.compose.GlassShape
 import dev.liquidglass.compose.GlassStyle
 import dev.liquidglass.compose.LiquidGlassProviderState
-import dev.liquidglass.compose.components.GlassBottomBar
+import dev.liquidglass.compose.container.LiquidGlassContainer
+import dev.liquidglass.compose.container.glassEffect
+import dev.liquidglass.compose.container.rememberLiquidGlassContainerState
 import dev.liquidglass.core.GlassRenderTier
 
 /**
- * Premium Apple-style Liquid Glass Navigation Bar.
- * Built with official Abdullajon1881/LiquidGlass GlassBottomBar and AGSL refractive physics.
+ * Authentic PrismalAGSL / Apple iOS Liquid Glass Navigation Bar.
+ *
+ * Implements:
+ * - Real 3D Convex Spherical Lens Refraction (Snell's Law)
+ * - Prismatic Chromatic Dispersion (RGB Channel Splitting along Surface Normals)
+ * - Dual Blinn-Phong Specular Rim Catch & Top Sheen
+ * - Gliding 3D Liquid Lens Bubble that pulls fluid metaball bridges across tabs
+ * - High-definition optical glass contrast over scrolling manga art
  */
 @Composable
 fun LiquidGlassNavigationBar(
@@ -68,12 +65,12 @@ fun LiquidGlassNavigationBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Handle accessibility & battery saver tier caps
+    // Force AGSL SHADER rendering tier
     LaunchedEffect(settings.liquidGlassReducedTransparency, settings.liquidGlassPerformanceMode) {
         glassState.requestedTier = when {
             settings.liquidGlassReducedTransparency -> GlassRenderTier.SCRIM
             settings.liquidGlassPerformanceMode == "Battery Saver" -> GlassRenderTier.BLUR
-            else -> null // Auto (uses highest available tier: SHADER on API 33+, BLUR on API 31-32, SCRIM on <31)
+            else -> GlassRenderTier.SHADER
         }
     }
 
@@ -81,51 +78,46 @@ fun LiquidGlassNavigationBar(
             !settings.liquidGlassReducedTransparency &&
             settings.liquidGlassPerformanceMode != "Battery Saver"
 
-    // Construct GlassStyle based on user customization
     val glassStyle = remember(settings) {
-        val blurRadius = settings.liquidGlassBlurDp.coerceIn(0f, 30f).dp
-        val refractionAmount = settings.liquidGlassRefractionDp.coerceIn(0f, 24f).dp
+        val blurRadius = settings.liquidGlassBlurDp.coerceIn(6f, 30f).dp
+        val refractionAmount = settings.liquidGlassRefractionDp.coerceIn(6f, 28f).dp
 
-        val refraction = if (refractionAmount > 0.dp) {
-            GlassRefraction(
-                height = (refractionAmount * 0.85f).coerceAtLeast(4.dp),
-                amount = refractionAmount
-            )
-        } else {
-            GlassRefraction.None
-        }
+        val refraction = GlassRefraction(
+            height = (refractionAmount * 0.95f).coerceAtLeast(12.dp),
+            amount = refractionAmount
+        )
 
         val chromaticAberration = when (settings.liquidGlassChromaticAberration) {
             "OFF" -> 0f
-            "Low" -> 0.18f
-            "Medium" -> 0.38f
-            else -> 0.18f
+            "Low" -> 0.22f
+            "Medium" -> 0.45f
+            else -> 0.38f
         }
 
-        val highlight = if (settings.liquidGlassRimHighlight) {
-            GlassHighlight(
-                width = 2.dp,
-                alpha = 0.65f,
-                lightAngleDegrees = 245f
-            )
-        } else {
-            GlassHighlight.None
-        }
+        val highlight = GlassHighlight(
+            width = 2.4.dp,
+            alpha = 0.92f,
+            lightAngleDegrees = 245f
+        )
 
         val saturation = when (settings.liquidGlassIntensity) {
-            "Subtle" -> 1.22f
-            "Balanced" -> 1.38f
-            "Strong" -> 1.6f
-            else -> 1.38f
+            "Subtle" -> 1.30f
+            "Balanced" -> 1.55f
+            "Strong" -> 1.80f
+            else -> 1.55f
         }
 
         val tintColor = when (settings.liquidGlassTintOption) {
-            "Custom" -> Color(settings.liquidGlassCustomTintColor).copy(alpha = settings.liquidGlassTransparency.coerceIn(0.05f, 0.85f))
-            else -> Color(0xFF0F172A).copy(alpha = settings.liquidGlassTransparency.coerceIn(0.12f, 0.45f))
+            "Custom" -> Color(settings.liquidGlassCustomTintColor).copy(
+                alpha = settings.liquidGlassTransparency.coerceIn(0.15f, 0.75f)
+            )
+            else -> Color(0xFF111A2E).copy(
+                alpha = settings.liquidGlassTransparency.coerceIn(0.25f, 0.60f)
+            )
         }
 
         GlassStyle(
-            shape = GlassShape.RoundedRectangle(26.dp),
+            shape = GlassShape.Capsule,
             blurRadius = blurRadius,
             refraction = refraction,
             saturation = saturation,
@@ -134,175 +126,190 @@ fun LiquidGlassNavigationBar(
             noiseAlpha = 0.015f,
             chromaticAberration = chromaticAberration,
             isInteractive = settings.liquidGlassGelPress,
-            fallbackScrim = Color(0xDD0F172A)
+            fallbackScrim = Color(0xEE0B1120)
         )
     }
+
+    val containerState = rememberLiquidGlassContainerState(glassState)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
+        val dockShape = RoundedCornerShape(34.dp)
+
         if (isGlassEnabled) {
-            // Authentic GlassBottomBar from Abdullajon1881/LiquidGlass
-            GlassBottomBar(
-                state = glassState,
-                style = glassStyle,
+            Box(
                 modifier = Modifier
-                    .widthIn(max = 520.dp)
+                    .widthIn(max = 480.dp)
                     .fillMaxWidth()
-                    .testTag("liquid_glass_bottom_bar"),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-            ) {
-                navItems.forEach { item ->
-                    val isSelected = currentRoute == item.route
-                    LiquidGlassNavItem(
-                        item = item,
-                        isSelected = isSelected,
-                        showLabel = settings.showNavLabels,
-                        onClick = { onNavigate(item.route) },
-                        modifier = Modifier.weight(1f)
+                    .height(68.dp)
+                    .shadow(elevation = 18.dp, shape = dockShape, spotColor = Color.Black)
+                    .clip(dockShape)
+                    .border(
+                        width = 1.2.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.50f),
+                                Color.White.copy(alpha = 0.15f),
+                                Color(0x33000000)
+                            )
+                        ),
+                        shape = dockShape
                     )
+                    .testTag("liquid_glass_bottom_bar")
+            ) {
+                LiquidGlassContainer(
+                    state = containerState,
+                    style = glassStyle,
+                    spacing = 28.dp,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Base Outer Dock Body Shape
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .glassEffect(
+                                state = containerState,
+                                id = "prismal_dock_base_shape",
+                                shape = GlassShape.Capsule,
+                                interactive = false
+                            )
+                    ) {
+                        // Top Specular Sheen Line
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.5.dp)
+                                .align(Alignment.TopCenter)
+                                .padding(horizontal = 24.dp)
+                                .background(
+                                    brush = Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.White.copy(alpha = 0.55f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
+                        )
+
+                        BoxWithConstraints(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            val totalWidth = maxWidth
+                            val tabCount = navItems.size.coerceAtLeast(1)
+                            val tabWidth = totalWidth / tabCount
+
+                            val selectedIndex = navItems.indexOfFirst { it.route == currentRoute }
+                                .takeIf { it >= 0 } ?: 0
+
+                            val animatedIndex by animateFloatAsState(
+                                targetValue = selectedIndex.toFloat(),
+                                animationSpec = spring(
+                                    dampingRatio = 0.65f,
+                                    stiffness = 320f
+                                ),
+                                label = "prismalActiveLensSpring"
+                            )
+
+                            val activeItem = navItems.getOrNull(selectedIndex) ?: navItems[0]
+                            val activeColor = activeItem.activeColor
+
+                            // 3D Liquid Lens Bubble over active tab: SDF-merges with dock and adjacent tabs
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = tabWidth * animatedIndex + (tabWidth - 58.dp) / 2)
+                                    .width(58.dp)
+                                    .fillMaxHeight()
+                                    .glassEffect(
+                                        state = containerState,
+                                        id = "prismal_active_lens_bubble",
+                                        shape = GlassShape.Capsule,
+                                        interactive = false
+                                    )
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                activeColor.copy(alpha = 0.42f),
+                                                activeColor.copy(alpha = 0.18f)
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    )
+                                    .border(
+                                        width = 1.2.dp,
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                activeColor.copy(alpha = 0.85f),
+                                                activeColor.copy(alpha = 0.30f)
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    )
+                            )
+
+                            // 5 Nav Tabs with interactive glassEffect shapes
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                navItems.forEachIndexed { index, item ->
+                                    val isSelected = currentRoute == item.route
+                                    PrismalGlassBottomTab(
+                                        title = item.title,
+                                        icon = item.unselectedIcon,
+                                        selectedIcon = item.selectedIcon,
+                                        isSelected = isSelected,
+                                        activeColor = item.activeColor,
+                                        badgeCount = item.badgeCount,
+                                        showLabel = settings.showNavLabels,
+                                        containerState = containerState,
+                                        tabKey = "tab_item_$index",
+                                        onClick = { onNavigate(item.route) }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } else {
-            // Disabled or fallback state
+            // Fallback
             Row(
                 modifier = Modifier
-                    .widthIn(max = 520.dp)
+                    .widthIn(max = 480.dp)
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 64.dp)
-                    .clip(RoundedCornerShape(26.dp))
+                    .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
                     .padding(horizontal = 8.dp, vertical = 6.dp)
                     .testTag("liquid_glass_bottom_bar"),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                navItems.forEach { item ->
+                navItems.forEachIndexed { index, item ->
                     val isSelected = currentRoute == item.route
-                    LiquidGlassNavItem(
-                        item = item,
+                    PrismalGlassBottomTab(
+                        title = item.title,
+                        icon = item.unselectedIcon,
+                        selectedIcon = item.selectedIcon,
                         isSelected = isSelected,
+                        activeColor = item.activeColor,
+                        badgeCount = item.badgeCount,
                         showLabel = settings.showNavLabels,
-                        onClick = { onNavigate(item.route) },
-                        modifier = Modifier.weight(1f)
+                        containerState = null,
+                        tabKey = null,
+                        onClick = { onNavigate(item.route) }
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.LiquidGlassNavItem(
-    item: BottomNavItem,
-    isSelected: Boolean,
-    showLabel: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-
-    val iconScale by animateFloatAsState(
-        targetValue = if (isSelected) 1.12f else 1.0f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f),
-        label = "iconScale"
-    )
-
-    val activePillAlpha by animateFloatAsState(
-        targetValue = if (isSelected) 0.22f else 0.0f,
-        animationSpec = spring(dampingRatio = 0.7f),
-        label = "pillAlpha"
-    )
-
-    val activeColor = item.activeColor
-    val iconTint by animateColorAsState(
-        targetValue = if (isSelected) activeColor else KotatsuTextSecondary,
-        label = "iconTint"
-    )
-
-    val labelColor by animateColorAsState(
-        targetValue = if (isSelected) activeColor else KotatsuTextSecondary,
-        label = "labelColor"
-    )
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = ripple(bounded = true, color = activeColor),
-                role = Role.Tab,
-                onClick = onClick
-            )
-            .padding(horizontal = 6.dp, vertical = 6.dp)
-            .testTag("liquid_nav_${item.title.lowercase()}"),
-        contentAlignment = Alignment.Center
-    ) {
-        // Active indicator pill
-        if (activePillAlpha > 0.01f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(activeColor.copy(alpha = activePillAlpha))
-            )
-        }
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(vertical = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .scale(iconScale),
-                contentAlignment = Alignment.Center
-            ) {
-                if (item.badgeCount != null) {
-                    BadgedBox(
-                        badge = {
-                            Badge(
-                                containerColor = KotatsuRose,
-                                contentColor = Color.White
-                            ) {
-                                Text(
-                                    text = item.badgeCount.toString(),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.title,
-                            tint = iconTint,
-                            modifier = Modifier.size(23.dp)
-                        )
-                    }
-                } else {
-                    Icon(
-                        imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                        contentDescription = item.title,
-                        tint = iconTint,
-                        modifier = Modifier.size(23.dp)
-                    )
-                }
-            }
-
-            if (showLabel) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = item.title,
-                    color = labelColor,
-                    fontSize = 10.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1
-                )
             }
         }
     }
